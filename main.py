@@ -9,12 +9,16 @@
 - 自动错误恢复和重连机制
 - 无限制的性能优化
 - 实时数据处理和状态更新
+- 自动系统识别和优化
+  * Linux: 使用uvloop实现最高性能
+  * Windows: 使用原生事件循环
 
 依赖项：
 - asyncio: 用于异步IO操作
 - concurrent.futures: 用于线程池管理
 - Environment.exchange_config: 交易所配置信息
 - ExchangeModules: 交易所接口实现
+- uvloop (Linux): 用于提供更高性能的事件循环
 
 使用方法：
 1. 确保已正确配置 Environment/exchange_config.py 中的交易所参数
@@ -28,17 +32,18 @@
 - 运行前请确保网络连接稳定
 - 建议在高性能服务器上运行以获得最佳性能
 - 程序会自动处理断线重连，无需手动干预
+- Linux系统下会自动使用uvloop优化性能
 """
 
-from asyncio import WindowsSelectorEventLoopPolicy, gather, run, set_event_loop_policy, create_task, Queue, TaskGroup
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import sys
 
 from Environment.exchange_config import EXCHANGES, EXCHANGE_CONFIGS, MARKET_TYPES, QUOTE_CURRENCIES
 from ExchangeModules import ExchangeInstance, MonitorManager
 
 
-async def process_exchange_data(exchange_id: str, monitor_manager: MonitorManager, queue: Queue):
+async def process_exchange_data(exchange_id: str, monitor_manager: MonitorManager, queue: asyncio.Queue):
     """
     处理单个交易所的数据监控任务
 
@@ -48,7 +53,7 @@ async def process_exchange_data(exchange_id: str, monitor_manager: MonitorManage
     参数：
         exchange_id (str): 交易所标识符，必须与配置文件中的定义匹配
         monitor_manager (MonitorManager): 监控管理器实例，负责具体的监控实现
-        queue (Queue): 异步队列，用于报告处理状态和错误
+        queue (asyncio.Queue): 异步队列，用于报告处理状态和错误
 
     异常处理：
         - 捕获所有异常并通过队列报告
@@ -110,7 +115,7 @@ async def main():
     # 创建实例
     exchange_instance = ExchangeInstance()
     monitor_manager = MonitorManager(exchange_instance, config)
-    queue = Queue()
+    queue = asyncio.Queue()
 
     try:
         # 初始化交易所
@@ -120,28 +125,33 @@ async def main():
         # 开始监控
         monitor_manager.start_monitoring(config['exchanges'])
 
-        # 使用 TaskGroup 进行并发控制
-        async with TaskGroup() as tg:
-            # 为每个交易所创建独立的监控任务
-            for exchange_id in config['exchanges']:
-                tg.create_task(process_exchange_data(exchange_id, monitor_manager, queue))
+        # 创建所有监控任务
+        tasks = []
+        
+        # 为每个交易所创建独立的监控任务
+        for exchange_id in config['exchanges']:
+            task = asyncio.create_task(process_exchange_data(exchange_id, monitor_manager, queue))
+            tasks.append(task)
 
-            # 创建结果处理任务
-            async def process_results():
-                """
-                内部异步函数：处理监控结果
+        # 创建结果处理任务
+        async def process_results():
+            """
+            内部异步函数：处理监控结果
 
-                持续从队列中获取监控结果并进行处理：
-                - 成功：静默处理
-                - 失败：打印重连信息
-                """
-                while True:
-                    exchange_id, success = await queue.get()
-                    if not success:
-                        print(f"交易所 {exchange_id} 需要重新连接")
-                    queue.task_done()
+            持续从队列中获取监控结果并进行处理：
+            - 成功：静默处理
+            - 失败：打印重连信息
+            """
+            while True:
+                exchange_id, success = await queue.get()
+                if not success:
+                    print(f"交易所 {exchange_id} 需要重新连接")
+                queue.task_done()
 
-            tg.create_task(process_results())
+        tasks.append(asyncio.create_task(process_results()))
+
+        # 等待所有任务完成
+        await asyncio.gather(*tasks)
 
     except KeyboardInterrupt:
         print("\n正在关闭连接...")
@@ -151,9 +161,39 @@ async def main():
         await exchange_instance.close_all()
 
 
+def setup_event_loop():
+    """
+    设置事件循环
+    
+    根据运行的操作系统自动选择最优的事件循环实现：
+    - Linux: 使用uvloop获得最佳性能
+    - Windows: 使用WindowsSelectorEventLoopPolicy
+    - 其他系统: 使用默认事件循环
+    
+    注意：
+        在Linux系统下，需要先安装uvloop包：
+        pip install uvloop
+    """
+    if sys.platform == 'linux':
+        try:
+            import uvloop
+            uvloop.install()
+            print("已启用 uvloop 以获得最佳性能")
+        except ImportError:
+            print("警告: 未安装 uvloop，建议安装以获得更好的性能")
+            print("可以使用以下命令安装: pip install uvloop")
+    elif sys.platform == 'win32':
+        # 仅在Windows系统下导入Windows特定的策略
+        from asyncio import WindowsSelectorEventLoopPolicy, set_event_loop_policy
+        set_event_loop_policy(WindowsSelectorEventLoopPolicy())
+        print("已启用 Windows 事件循环策略")
+    else:
+        print("使用默认事件循环策略")
+
+
 if __name__ == "__main__":
-    # 在Windows下设置事件循环策略
-    set_event_loop_policy(WindowsSelectorEventLoopPolicy())
+    # 设置事件循环
+    setup_event_loop()
 
     print("交易所价格监控程序启动...")
     print(f"监控的交易所: {', '.join(EXCHANGES)}")
@@ -163,4 +203,4 @@ if __name__ == "__main__":
         print(f"  - {market_type}: {'启用' if enabled else '禁用'}")
 
     # 运行主程序
-    run(main())
+    asyncio.run(main())
