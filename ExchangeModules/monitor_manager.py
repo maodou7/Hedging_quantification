@@ -14,6 +14,7 @@
    - 支持多种市场类型
    - 支持多种计价货币
    - 实时价格更新和展示
+   - 支持超高精度价格显示
 
 3. 系统管理
    - 统一的初始化接口
@@ -45,6 +46,7 @@
 """
 
 import json
+from decimal import Decimal
 from typing import List
 
 from .common_symbols_finder import CommonSymbolsFinder
@@ -179,7 +181,8 @@ class MonitorManager:
         """
         打印价格信息
         
-        此方法将价格信息格式化为JSON并打印输出。
+        此方法将价格信息格式化为JSON并打印输出。使用Decimal处理高精度价格，
+        避免科学计数法表示，保持价格的完整精度。
         
         Args:
             exchange_id (str): 交易所ID
@@ -194,15 +197,22 @@ class MonitorManager:
                 "type": "spot",
                 "symbol": "BTC/USDT",
                 "quote": "USDT",
-                "price": 50000.0
+                "price": "0.000009404"
             }
         """
+        # 使用Decimal处理价格，避免科学计数法
+        price_decimal = Decimal(str(price))
+        formatted_price = format(price_decimal, 'f')  # 使用普通十进制格式
+        
+        # 移除末尾多余的0，但保留必要的小数位
+        formatted_price = formatted_price.rstrip('0').rstrip('.') if '.' in formatted_price else formatted_price
+        
         print(json.dumps({
             "exchange": exchange_id,
             "type": market_type,
             "symbol": symbol,
             "quote": quote,
-            "price": price
+            "price": formatted_price
         }, ensure_ascii=False))
 
     async def _handle_monitor_error(self, exchange_id: str, exchange, error: Exception):
