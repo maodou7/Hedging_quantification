@@ -16,12 +16,12 @@
 依赖项：
 - asyncio: 用于异步IO操作
 - concurrent.futures: 用于线程池管理
-- Environment.exchange_config: 交易所配置信息
+- Config.exchange_config: 交易所配置信息
 - ExchangeModules: 交易所接口实现
 - uvloop (Linux): 用于提供更高性能的事件循环
 
 使用方法：
-1. 确保已正确配置 Environment/exchange_config.py 中的交易所参数
+1. 确保已正确配置 Config/exchange_config.py 中的交易所参数
 2. 直接运行此文件即可启动监控系统
 3. 使用 Ctrl+C 可以安全地停止程序
 
@@ -39,7 +39,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import sys
 
-from Environment.exchange_config import (
+from Config.exchange_config import (
     EXCHANGES, EXCHANGE_CONFIGS, MARKET_TYPES, 
     QUOTE_CURRENCIES, MARKET_STRUCTURE_CONFIG
 )

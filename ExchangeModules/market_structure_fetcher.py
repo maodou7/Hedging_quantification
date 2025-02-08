@@ -304,7 +304,7 @@ class MarketStructureFetcher:
             market_structure (Dict): 市场结构数据
             include_comments (bool): 是否包含注释字段，默认为True
         """
-        from Environment.exchange_config import MARKET_STRUCTURE_CONFIG
+        from Config.exchange_config import MARKET_STRUCTURE_CONFIG
         
         file_path = os.path.join(self.output_dir, f"{exchange_id}_market_structure.json")
         try:
