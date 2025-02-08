@@ -27,7 +27,7 @@
     enabled_types = processor.get_enabled_market_types(market_types)
     
     # 处理市场数据
-    market_sets = processor.process_markets(markets, config, market_types)
+    market_sets = processor.process_markets(markets, Config, market_types)
 
 依赖：
 - ExchangeInstance: 用于获取交易所实例
@@ -56,7 +56,7 @@ class MarketProcessor:
     使用示例：
         processor = MarketProcessor(exchange_instance)
         enabled_types = processor.get_enabled_market_types(market_types)
-        market_sets = processor.process_markets(markets, config, market_types)
+        market_sets = processor.process_markets(markets, Config, market_types)
     """
     
     def __init__(self, exchange_instance: ExchangeInstance):
@@ -121,7 +121,7 @@ class MarketProcessor:
                 'BTC/USDT': {'quote': 'USDT', 'type': 'spot'},
                 'ETH/USDT': {'quote': 'USDT', 'type': 'spot'}
             }
-            result = processor.process_markets(markets, config, market_types)
+            result = processor.process_markets(markets, Config, market_types)
         """
         market_sets = self._get_empty_market_sets(market_types, config)
         for symbol, market in markets.items():

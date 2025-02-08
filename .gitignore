@@ -30,9 +30,19 @@ ENV/
 .vscode/
 *.swp
 *.swo
-.project
-.pydevproject
-.settings/
+
+# Project specific
+cache/
+checkpoints/
+models/
+market_structures/
+*.log
+.env
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
 
 # Logs
 logs/
@@ -44,20 +54,6 @@ pids/
 *.pid
 *.seed
 *.pid.lock
-
-# Testing
-.coverage
-.tox/
-.pytest_cache/
-htmlcov/
-
-# Project specific
-Config/api_keys.py
-Config/secrets.py
-market_structures/*.json
-.env
-*.db
-*.sqlite3
 
 # OS specific
 .DS_Store

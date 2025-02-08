@@ -6,6 +6,7 @@
 1. 获取交易所的详细市场信息
 2. 标准化市场数据结构
 3. 将数据保存为JSON格式
+4. 支持Redis和本地缓存
 
 使用示例：
     fetcher = MarketStructureFetcher(exchange_instance)
@@ -15,9 +16,11 @@
 import json
 import os
 from typing import Dict, List, Union, Any, Set
-
+import asyncio
 
 from .exchange_instance import ExchangeInstance
+from src.core.cache_manager import CacheManager
+from src.core.cache_config import CACHE_CONFIG, CacheStrategy
 
 
 class MarketStructureFetcher:
@@ -49,6 +52,7 @@ class MarketStructureFetcher:
             'swap': set(),
             'option': set()
         }
+        self.cache_manager = CacheManager()
         self._ensure_output_dir()
     
     def _ensure_output_dir(self):
@@ -230,36 +234,38 @@ class MarketStructureFetcher:
             if market_type in self.common_symbols:
                 self.common_symbols[market_type] = set(symbols)
     
-    def fetch_market_structure(self, exchange_id: str) -> Dict:
-        """
-        获取指定交易所的市场结构
-        
-        Args:
-            exchange_id (str): 交易所ID
-            
-        Returns:
-            Dict: 市场结构数据
-        """
+    async def fetch_market_structure(self, exchange_id: str) -> Dict:
+        """异步获取指定交易所的市场结构"""
+        # 尝试从缓存获取
+        cache_key = f"market_structure:{exchange_id}"
+        cached_data = self.cache_manager.get(cache_key)
+        if cached_data:
+            return cached_data
+
         try:
-            exchange = self.exchange_instance._rest_instances[exchange_id]
-            # 加载市场数据
-            markets = exchange.load_markets()
+            # 异步获取交易所实例
+            exchange = await self.exchange_instance.get_rest_instance(exchange_id)
+            
+            # 异步加载市场数据
+            markets = await asyncio.get_event_loop().run_in_executor(
+                None, exchange.load_markets
+            )
             
             # 处理每个市场的数据
             processed_markets = {}
             for symbol, market in markets.items():
-                # 检查每种市场类型
-                for market_type in self.common_symbols.keys():
-                    if (market.get(market_type) and symbol in self.common_symbols[market_type]):
-                        processed_market = self._process_market_data(exchange, market)
-                        # 移除所有None值的字段
-                        processed_market = {k: v for k, v in processed_market.items() if v is not None}
-                        processed_markets[symbol] = processed_market
-                        break  # 一个交易对只能属于一种类型
+                # 检查是否为共有交易对
+                market_type = market.get('type', 'spot')
+                if (market_type in self.common_symbols and 
+                    symbol in self.common_symbols[market_type]):
+                    processed_markets[symbol] = self._process_market_data(exchange, market)
+            
+            # 保存到缓存
+            self.cache_manager.set(cache_key, processed_markets)
             
             return processed_markets
         except Exception as e:
-            print(f"获取 {exchange_id} 的市场数据时发生错误: {str(e)}")
+            print(f"获取{exchange_id}市场结构时发生错误: {str(e)}")
             return {}
     
     def _filter_comments(self, data: Dict) -> Dict:
@@ -297,42 +303,31 @@ class MarketStructureFetcher:
 
     def save_market_structure(self, exchange_id: str, market_structure: Dict, include_comments: bool = True):
         """
-        保存市场结构数据到JSON文件
+        保存市场结构数据
         
         Args:
             exchange_id (str): 交易所ID
             market_structure (Dict): 市场结构数据
-            include_comments (bool): 是否包含注释字段，默认为True
+            include_comments (bool): 是否包含注释
         """
-        from Config.exchange_config import MARKET_STRUCTURE_CONFIG
-        
-        file_path = os.path.join(self.output_dir, f"{exchange_id}_market_structure.json")
-        try:
-            # 根据需要过滤注释
-            data_to_save = market_structure if include_comments else self._filter_comments(market_structure)
+        if not market_structure:
+            return
             
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(
-                    data_to_save, 
-                    f, 
-                    indent=MARKET_STRUCTURE_CONFIG['indent'],
-                    ensure_ascii=MARKET_STRUCTURE_CONFIG['ensure_ascii']
-                )
-            print(f"已保存 {exchange_id} 的市场结构到: {file_path}")
-        except Exception as e:
-            print(f"保存 {exchange_id} 的市场结构时发生错误: {str(e)}")
+        # 如果是本地缓存策略，则保存到本地文件
+        if CACHE_CONFIG["strategy"] == CacheStrategy.LOCAL:
+            data = market_structure if include_comments else self._filter_comments(market_structure)
+            filename = os.path.join(self.output_dir, f"{exchange_id}_market_structure.json")
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
     
-    def fetch_and_save_market_structures(self, exchanges: List[str], include_comments: bool = True):
-        """
-        获取并保存多个交易所的市场结构
-        
-        Args:
-            exchanges (List[str]): 交易所ID列表
-            include_comments (bool): 是否包含注释字段，默认为True
-        """
+    async def fetch_and_save_market_structures(self, exchanges: List[str], include_comments: bool = True):
+        """异步获取并保存多个交易所的市场结构"""
+        tasks = []
         for exchange_id in exchanges:
-            print(f"正在获取 {exchange_id} 的市场结构...")
-            market_structure = self.fetch_market_structure(exchange_id)
+            tasks.append(self.fetch_market_structure(exchange_id))
+        
+        results = await asyncio.gather(*tasks)
+        
+        for exchange_id, market_structure in zip(exchanges, results):
             if market_structure:
-                self.save_market_structure(exchange_id, market_structure, include_comments)
-            print(f"完成 {exchange_id} 的市场结构获取和保存\n") 
+                self.save_market_structure(exchange_id, market_structure, include_comments) 

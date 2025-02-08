@@ -1,245 +1,135 @@
-# Hedging Quantification - 对冲量化系统
+# 对冲量化交易系统
 
-[English](README.md) | [简体中文](README_CN.md)
+## 项目简介
 
-A high-performance cryptocurrency exchange monitoring system that supports real-time price tracking across multiple exchanges.
+这是一个基于深度学习和机器学习的对冲量化交易系统，支持多种模型（LSTM 和 XGBoost）进行市场预测。
 
-[![Python Version](https://img.shields.io/badge/python-3.12.8-blue.svg)](https://www.python.org/downloads/release/python-3128/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![Documentation Status](https://readthedocs.org/projects/hedging-quantification/badge/?version=latest)](https://hedging-quantification.readthedocs.io/en/latest/?badge=latest)
+## 主要特性
 
-## Features
+- 支持多种深度学习和机器学习模型
+  - LSTM 用于时序预测
+  - XGBoost 用于特征驱动预测
+- 完整的模型生命周期管理
+  - 模型训练
+  - 模型评估
+  - 模型保存/加载
+  - 模型预测
+- 特征工程和数据预处理
+- 模型性能评估和监控
+- 特征重要性分析
 
-- **Multi-Exchange Support**: Simultaneously monitor multiple cryptocurrency exchanges
-- **Real-time Price Monitoring**: WebSocket-based real-time price updates
-- **Market Type Support**: Support for spot, futures, and margin markets
-- **High Precision**: Advanced price precision handling following CCXT standards
-- **Market Parameters**: Comprehensive market information including:
-  - Minimum purchase amount
-  - Leverage range
-  - Trading fees (maker/taker)
-  - Price and amount precision
-- **Error Handling**: Robust error handling and automatic reconnection
-- **Cross-Platform**: Optimized for both Windows and Linux systems
-- **Performance Optimization**: Utilizes uvloop on Linux and optimized event loops on Windows
-- **Data Validation**: Comprehensive input validation and error checking
-- **Extensible Architecture**: Easy to add new exchanges and features
+## 系统要求
 
-## Documentation
+- Python 3.8+
+- PyTorch 1.8+
+- XGBoost 1.5+
+- 其他依赖见 requirements.txt
 
-Full documentation is available at [hedging-quantification.readthedocs.io](https://hedging-quantification.readthedocs.io/).
+## 快速开始
 
-## Requirements
-
-- Python 3.12.8
-- ccxt
-- asyncio
-- See [requirements.txt](requirements.txt) for full list
-
-## Installation
-
-1. Clone the repository:
+1. 克隆仓库
 
 ```bash
-git clone https://github.com/maodou7/Hedging_quantification.git
-cd Hedging_quantification
+git clone https://github.com/yourusername/hedging-quantification.git
+cd hedging-quantification
 ```
 
-2. Create and activate environment:
-
-Option 1 - Using Anaconda (Recommended):
+2. 安装依赖
 
 ```bash
-# List all environments
-conda env list
-
-# Create a new environment with Python 3.12.8
-conda create -n hedging python=3.12.8
-
-# Activate the environment
-conda activate hedging
-
-# Deactivate the environment when done
-conda deactivate
-
-# Remove environment if needed
-conda remove -n hedging --all
-```
-
-Option 2 - Using venv:
-
-For Linux/macOS:
-
-```bash
-python -m venv venv
-source venv/bin/activate
-```
-
-For Windows:
-
-```bash
-python -m venv venv
-.\venv\Scripts\activate
-```
-
-3. Install dependencies:
-
-For Linux/macOS:
-
-```bash
-# Install system dependencies
-sudo apt-get update
-sudo apt-get install python3-dev build-essential
-
-# Install Python dependencies
-pip install --upgrade pip
-pip install -r requirements.txt
-
-# Install uvloop for better performance (Linux only)
-pip install uvloop
-```
-
-For Windows:
-
-```bash
-pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## Configuration
+3. 运行测试
 
-Edit `Config/exchange_config.py` to configure:
+```bash
+python test_system.py
+```
 
-- Exchanges to monitor
-- Market types (spot/futures/margin)
-- Quote currencies
-- Market structure settings
+## 文档
 
-Example configuration:
+- [API 参考](docs/api_reference.md)
+- [使用教程](docs/tutorial.md)
+- [配置示例](docs/config_example.md)
+
+## 项目结构
+
+```
+hedging-quantification/
+├── src/
+│   ├── ml/
+│   │   ├── model_trainer.py
+│   │   ├── feature_engineering.py
+│   │   └── prediction_model.py
+│   ├── core/
+│   │   ├── exchange_config.py
+│   │   ├── cache_config.py
+│   │   └── cache_manager.py
+│   ├── exchange/
+│   │   ├── exchange_factory.py
+│   │   ├── price_monitor.py
+│   │   └── market_structure_fetcher.py
+│   └── utils/
+│       └── logger.py
+├── docs/
+│   ├── api_reference.md
+│   ├── tutorial.md
+│   └── config_example.md
+├── tests/
+│   ├── test_system.py
+│   └── test_monitor.py
+├── models/
+├── data/
+├── logs/
+├── requirements.txt
+└── README.md
+```
+
+## 使用示例
 
 ```python
-EXCHANGES = ['binance', 'bybit', 'okx']
-MARKET_TYPES = {
-    'spot': True,
-    'future': True,
-    'margin': False
-}
-QUOTE_CURRENCIES = ['USDT', 'BTC']
+from src.ml.model_trainer import ModelTrainer
+import numpy as np
+
+# 准备数据
+X = np.random.randn(1000, 10, 33)  # (样本数, 序列长度, 特征数)
+y = np.random.randn(1000)  # 目标变量
+
+# 创建训练器
+trainer = ModelTrainer()
+
+# 训练模型
+model_id, metrics, history = trainer.train_model(X, y, model_type='lstm')
+
+# 保存模型
+trainer.save_model(model_id)
+
+# 使用模型进行预测
+predictions = trainer.predict(model_id, X[:5])
 ```
 
-## Usage
+## 开发计划
 
-Run the main program:
+- [ ] 添加更多机器学习模型
+- [ ] 实现自动化特征选择
+- [ ] 添加模型解释功能
+- [ ] 优化模型训练性能
+- [ ] 添加 Web 界面
 
-```bash
-python main.py
-```
+## 贡献指南
 
-The program will:
+1. Fork 项目
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 创建 Pull Request
 
-1. Initialize exchange connections
-2. Find common trading pairs
-3. Start real-time price monitoring
-4. Output formatted JSON price data
+## 许可证
 
-Example output:
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
 
-```json
-{
-  "exchange": "binance",
-  "type": "spot",
-  "symbol": "BTC/USDT",
-  "quote": "USDT",
-  "price": "45123.45",
-  "min_cost": "5.0",
-  "leverage": "1-100",
-  "fees": {
-    "taker": "0.001",
-    "maker": "0.001"
-  },
-  "precision": {
-    "price": 2,
-    "amount": 6
-  }
-}
-```
+## 联系方式
 
-## Architecture
-
-- `main.py`: Main program entry point
-- `ExchangeModules/`:
-  - `exchange_instance.py`: Exchange connection management
-  - `monitor_manager.py`: Price monitoring system
-  - `market_processor.py`: Market data processing
-  - `common_symbols_finder.py`: Common trading pair detection
-  - `market_structure_fetcher.py`: Market structure handling
-
-## Performance Optimization
-
-- Automatic event loop optimization:
-  - Linux: Uses `uvloop` for maximum performance (up to 2-4x faster than default)
-  - Windows: Uses `WindowsSelectorEventLoopPolicy` for optimal performance
-- Efficient WebSocket connections with automatic reconnection
-- Optimized data structures for quick lookups
-- Memory-efficient data processing
-- Concurrent exchange processing
-- Connection pooling for REST API calls
-
-## Monitoring and Debugging
-
-- Real-time performance metrics
-- Detailed logging with different levels
-- WebSocket connection status monitoring
-- Memory usage tracking
-- Response time measurements
-- Error rate monitoring
-
-## Best Practices
-
-1. Always use the virtual environment
-2. Regularly update dependencies
-3. Monitor system resources
-4. Back up configuration files
-5. Check logs regularly
-6. Keep API keys secure
-7. Use appropriate timeouts for API calls
-
-## Testing
-
-Run the test suite:
-
-```bash
-pytest tests/
-```
-
-For coverage report:
-
-```bash
-coverage run -m pytest tests/
-coverage report
-```
-
-## Code Style
-
-This project uses [Black](https://github.com/psf/black) for code formatting and follows PEP 8 guidelines. To format your code:
-
-```bash
-black .
-```
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-## Security
-
-For security issues, please see our [Security Policy](SECURITY.md).
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for a list of changes.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- 项目维护者：[Your Name]
+- 邮箱：[your.email@example.com]
+- 项目链接：[https://github.com/yourusername/hedging-quantification](https://github.com/yourusername/hedging-quantification)

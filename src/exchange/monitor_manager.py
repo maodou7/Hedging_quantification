@@ -23,7 +23,7 @@
 
 使用示例：
     # 创建监控管理器
-    manager = MonitorManager(exchange_instance, config)
+    manager = MonitorManager(exchange_instance, Config)
     
     # 初始化交易所连接
     await manager.initialize(['binance', 'okex'])
@@ -65,10 +65,10 @@ class MonitorManager:
         exchange_instance (ExchangeInstance): 交易所实例管理器
         market_processor (MarketProcessor): 市场数据处理器
         common_symbols_finder (CommonSymbolsFinder): 共同交易对查找器
-        config (dict): 系统配置信息
+        Config (dict): 系统配置信息
     
     使用示例：
-        manager = MonitorManager(exchange_instance, config)
+        manager = MonitorManager(exchange_instance, Config)
         await manager.initialize(['binance'])
         manager.start_monitoring(['binance'])
         await manager.monitor_exchange('binance')

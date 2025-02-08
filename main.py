@@ -1,246 +1,201 @@
 """
-交易所数据监控主程序
+交易所价格监控与套利主程序
 
-此模块实现了一个高性能的异步交易所数据监控系统。该系统能够同时监控多个交易所的市场数据，
-并通过异步IO和并发处理来实现最大性能。
-
-主要功能：
-- 多交易所并发监控
-- 自动错误恢复和重连机制
-- 无限制的性能优化
-- 实时数据处理和状态更新
-- 自动系统识别和优化
-  * Linux: 使用uvloop实现最高性能
-  * Windows: 使用原生事件循环
-
-依赖项：
-- asyncio: 用于异步IO操作
-- concurrent.futures: 用于线程池管理
-- Config.exchange_config: 交易所配置信息
-- ExchangeModules: 交易所接口实现
-- uvloop (Linux): 用于提供更高性能的事件循环
-
-使用方法：
-1. 确保已正确配置 Config/exchange_config.py 中的交易所参数
-2. 直接运行此文件即可启动监控系统
-3. 使用 Ctrl+C 可以安全地停止程序
-
-示例：
-    python main.py
-
-注意事项：
-- 运行前请确保网络连接稳定
-- 建议在高性能服务器上运行以获得最佳性能
-- 程序会自动处理断线重连，无需手动干预
-- Linux系统下会自动使用uvloop优化性能
+此程序负责：
+1. 监控多个交易所的价格数据
+2. 实时分析套利机会
+3. 执行套利交易
 """
 
+import os
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
-import sys
+import signal
+from typing import Dict, List, Any
+from datetime import datetime
 
-from Config.exchange_config import (
-    EXCHANGES, EXCHANGE_CONFIGS, MARKET_TYPES, 
-    QUOTE_CURRENCIES, MARKET_STRUCTURE_CONFIG
+from src.exchange.exchange_instance import ExchangeInstance
+from src.exchange.market_structure_fetcher import MarketStructureFetcher
+from src.exchange.price_monitor import PriceMonitor
+from src.core.cache_manager import CacheManager
+from src.Config.exchange_config import (
+    EXCHANGES,
+    QUOTE_CURRENCIES,
+    MARKET_TYPES,
+    CACHE_MODE,
+    MONITOR_CONFIG,
+    REDIS_CONFIG,
+    MARKET_STRUCTURE_CONFIG,
+    COMMON_SYMBOLS,
+    EXCHANGE_CONFIGS,
+    SYMBOLS
 )
-from ExchangeModules import ExchangeInstance, MonitorManager, CommonSymbolsFinder
-from ExchangeModules.market_structure_fetcher import MarketStructureFetcher
-from ExchangeModules.market_processor import MarketProcessor
+from src.utils.system_adapter import SystemAdapter
+from src.exchange.exchange_factory import ExchangeFactory
+from src.strategies.spread_arbitrage_strategy import SpreadArbitrageStrategy
+from src.utils.logger import ArbitrageLogger
 
-
-async def process_exchange_data(exchange_id: str, monitor_manager: MonitorManager, queue: asyncio.Queue):
-    """
-    处理单个交易所的数据监控任务
-
-    此函数在独立的异步任务中运行，负责监控单个交易所的数据。
-    它会持续运行并在发生错误时自动尝试重连。
-
-    参数：
-        exchange_id (str): 交易所标识符，必须与配置文件中的定义匹配
-        monitor_manager (MonitorManager): 监控管理器实例，负责具体的监控实现
-        queue (asyncio.Queue): 异步队列，用于报告处理状态和错误
-
-    异常处理：
-        - 捕获所有异常并通过队列报告
-        - 在发生错误时等待1秒后自动重试
-        - 持续运行直到程序终止
-
-    返回：
-        无返回值，函数持续运行直到程序终止
-    """
-    while True:
+class GracefulExit:
+    """优雅退出处理类"""
+    
+    def __init__(self):
+        self.shutdown = False
+        self.tasks = set()
+        
+    def signal_handler(self, signum, frame):
+        """处理退出信号"""
+        print("\n收到退出信号，正在安全停止...")
+        self.shutdown = True
+        
+    async def shutdown_handler(self, monitor: PriceMonitor, arbitrage_strategy: SpreadArbitrageStrategy, exchange_instance: ExchangeInstance):
+        """处理关闭操作"""
         try:
-            await monitor_manager.monitor_exchange(exchange_id)
-            await queue.put((exchange_id, True))
+            # 停止套利策略
+            if arbitrage_strategy:
+                await arbitrage_strategy.stop()
+                print("已停止套利策略")
+
+            # 停止价格监控
+            if monitor:
+                await monitor.stop_monitoring()
+                print("已停止价格监控")
+            
+            # 取消所有运行中的任务
+            tasks = [t for t in self.tasks if not t.done()]
+            if tasks:
+                print(f"正在取消 {len(tasks)} 个运行中的任务...")
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # 关闭交易所连接
+            if exchange_instance:
+                print("正在关闭交易所连接...")
+                await exchange_instance.close_all()
+                print("已关闭所有交易所连接")
+            
         except Exception as e:
-            print(f"交易所 {exchange_id} 处理出错: {str(e)}")
-            await queue.put((exchange_id, False))
-            await asyncio.sleep(1)  # 错误后短暂延迟
+            print(f"清理资源时发生错误: {str(e)}")
+        finally:
+            print("所有资源已清理完毕")
 
-
-async def main():
-    """
-    主程序入口函数
-
-    此函数实现了整个监控系统的核心逻辑，包括：
-    1. 配置系统参数和性能优化
-    2. 初始化交易所连接
-    3. 启动监控任务
-    4. 管理错误处理和恢复机制
-
-    配置说明：
-        - 使用 ThreadPoolExecutor 实现最大并发
-        - 通过 TaskGroup 管理多个异步任务
-        - 使用队列进行任务状态管理
-
-    异常处理：
-        - 优雅处理键盘中断（Ctrl+C）
-        - 自动关闭所有交易所连接
-        - 捕获并记录所有异常
-
-    返回：
-        无返回值
-    """
-    # 设置更大的并发限制
-    asyncio.get_event_loop().set_default_executor(ThreadPoolExecutor(max_workers=None))
+class TradingSystem:
+    """交易系统主类"""
     
-    # 构建配置字典
-    config = {
-        'exchanges': EXCHANGES,
-        'market_types': MARKET_TYPES,
-        'quote_currencies': QUOTE_CURRENCIES,
-        'type_configs': {
-            market_type: {'type': config['type_configs'][market_type]['type']}
-            for exchange_id, config in EXCHANGE_CONFIGS.items()
-            for market_type in MARKET_TYPES
-            if market_type in config['type_configs']
-        }
-    }
-
-    # 创建实例
-    exchange_instance = ExchangeInstance()
-    monitor_manager = MonitorManager(exchange_instance, config)
-    queue = asyncio.Queue()
-
-    try:
-        # 初始化交易所
-        print("\n正在初始化交易所连接...")
-        await monitor_manager.initialize(config['exchanges'])
-
-        # 查找共同交易对
-        print("\n正在查找共同交易对...")
-        market_processor = MarketProcessor(exchange_instance)  # 传入exchange_instance参数
-        symbol_finder = CommonSymbolsFinder(exchange_instance, market_processor, config)
-        symbol_finder.find_common_symbols(config['exchanges'])
+    def __init__(self):
+        # 初始化系统适配器
+        self.system_adapter = SystemAdapter()
+        print("系统信息:", self.system_adapter.get_system_info())
         
-        # 获取共同交易对列表
-        common_symbols_by_type = {}
-        enabled_market_types = market_processor.get_enabled_market_types(config['market_types'])
-        for market_type in enabled_market_types:
-            symbols = []
-            for quote in config['quote_currencies']:
-                symbols.extend(list(symbol_finder.common_symbols[market_type][quote]))
-            if symbols:  # 只添加非空的市场类型
-                common_symbols_by_type[market_type] = symbols
+        # 设置事件循环
+        self.system_adapter.setup_event_loop()
         
-        # 获取市场结构
-        print("\n正在获取市场结构...")
-        market_structure_fetcher = MarketStructureFetcher(
-            exchange_instance,
-            output_dir=MARKET_STRUCTURE_CONFIG['output_dir']
-        )
-        market_structure_fetcher.set_common_symbols(common_symbols_by_type)
-        market_structure_fetcher.fetch_and_save_market_structures(
-            config['exchanges'],
-            include_comments=MARKET_STRUCTURE_CONFIG['include_comments']
-        )
-
-        # 开始监控
-        monitor_manager.start_monitoring(config['exchanges'])
-
-        # 创建所有监控任务
-        tasks = []
+        # 初始化基础组件
+        self.logger = ArbitrageLogger()
+        self.exchange_instance = ExchangeInstance()
+        self.exchange_factory = ExchangeFactory()
         
-        # 为每个交易所创建独立的监控任务
-        for exchange_id in config['exchanges']:
-            task = asyncio.create_task(process_exchange_data(exchange_id, monitor_manager, queue))
-            tasks.append(task)
-
-        # 创建结果处理任务
-        async def process_results():
-            """
-            内部异步函数：处理监控结果
-
-            持续从队列中获取监控结果并进行处理：
-            - 成功：静默处理
-            - 失败：打印重连信息
-            """
-            while True:
-                exchange_id, success = await queue.get()
-                if not success:
-                    print(f"交易所 {exchange_id} 需要重新连接")
-                queue.task_done()
-
-        tasks.append(asyncio.create_task(process_results()))
-
-        # 等待所有任务完成
-        await asyncio.gather(*tasks)
-
-    except KeyboardInterrupt:
-        print("\n正在关闭连接...")
-        await exchange_instance.close_all()
-    except Exception as e:
-        print(f"发生错误: {str(e)}")
-        await exchange_instance.close_all()
-
-
-def setup_event_loop():
-    """
-    设置事件循环
-    
-    根据运行的操作系统自动选择最优的事件循环实现：
-    - Linux: 使用uvloop获得最佳性能
-    - Windows: 使用WindowsSelectorEventLoopPolicy
-    - 其他系统: 使用默认事件循环
-    
-    注意：
-        在Linux系统下，需要先安装uvloop包：
-        pip install uvloop
-    """
-    if sys.platform == 'linux':
+        # 初始化依赖组件
+        self.market_structure_fetcher = MarketStructureFetcher(self.exchange_instance)
+        self.cache_manager = CacheManager()
+        
+        # 初始化套利策略
+        self.arbitrage_strategy = SpreadArbitrageStrategy(self.exchange_instance)
+        
+        # 初始化价格监控器
+        self.price_monitor = None
+        
+    async def _init_exchange(self, exchange_id: str):
+        """初始化单个交易所"""
+        print(f"初始化交易所 {exchange_id}...")
         try:
-            import uvloop
-            uvloop.install()
-            print("已启用 uvloop 以获得最佳性能")
-        except ImportError:
-            print("警告: 未安装 uvloop，建议安装以获得更好的性能")
-            print("可以使用以下命令安装: pip install uvloop")
-    elif sys.platform == 'win32':
-        # 仅在Windows系统下导入Windows特定的策略
-        from asyncio import WindowsSelectorEventLoopPolicy, set_event_loop_policy
-        set_event_loop_policy(WindowsSelectorEventLoopPolicy())
-        print("已启用 Windows 事件循环策略")
-    else:
-        print("使用默认事件循环策略")
-
+            config = EXCHANGE_CONFIGS.get(exchange_id, {})
+            exchange = await self.exchange_instance.get_exchange(exchange_id, config)
+            if not exchange:
+                print(f"初始化 {exchange_id} 失败: 无法创建交易所实例")
+                return False
+            return True
+        except Exception as e:
+            print(f"初始化 {exchange_id} 失败: {str(e)}")
+            return False
+            
+    async def _fetch_market_structure(self, exchange_id: str):
+        """获取市场结构"""
+        print(f"获取 {exchange_id} 市场结构...")
+        try:
+            await self.market_structure_fetcher.fetch_market_structure(exchange_id)
+            print(f"{exchange_id} 市场结构获取成功")
+            return True
+        except Exception as e:
+            print(f"获取 {exchange_id} 市场结构失败: {str(e)}")
+            return False
+            
+    async def initialize(self):
+        """初始化系统"""
+        print("\n正在初始化交易系统...")
+        
+        # 初始化交易所连接
+        for exchange_id in EXCHANGES:
+            await self._init_exchange(exchange_id)
+            await self._fetch_market_structure(exchange_id)
+        
+        try:
+            # 初始化价格监控器
+            self.price_monitor = PriceMonitor(
+                exchange_instance=self.exchange_instance,
+                cache_manager=self.cache_manager
+            )
+            
+            # 设置价格更新回调
+            self.price_monitor.set_price_update_callback(self._on_price_update)
+            return True
+        except Exception as e:
+            print(f"系统启动失败: {str(e)}")
+            return False
+            
+    async def _on_price_update(self, price_data: Dict[str, Any]):
+        """价格更新回调"""
+        try:
+            # 处理价格更新
+            await self.arbitrage_strategy.process_price_update(price_data)
+        except Exception as e:
+            self.logger.error(f"处理价格更新失败: {str(e)}")
+            
+    async def start(self):
+        """启动系统"""
+        if await self.initialize():
+            print("\n系统初始化完成，开始运行...")
+            await self.price_monitor.start_monitoring()
+        else:
+            print("\n系统初始化失败，无法启动")
+            
+    async def stop(self):
+        """停止系统"""
+        if self.price_monitor:
+            await self.price_monitor.stop_monitoring()
+        await self.exchange_instance.close_all()
+        print("\n系统已停止")
 
 if __name__ == "__main__":
-    # 设置事件循环
-    setup_event_loop()
-
-    print("交易所价格监控程序启动...")
-    print(f"监控的交易所: {', '.join(EXCHANGES)}")
-    print(f"监控的计价币种: {', '.join(QUOTE_CURRENCIES)}")
-    print("市场类型:")
-    for market_type, enabled in MARKET_TYPES.items():
-        print(f"  - {market_type}: {'启用' if enabled else '禁用'}")
+    try:
+        # 创建交易系统实例
+        trading_system = TradingSystem()
         
-    print("\n市场结构保存配置:")
-    print(f"  - 保存目录: {MARKET_STRUCTURE_CONFIG['output_dir']}")
-    print(f"  - 包含中文注释: {'是' if MARKET_STRUCTURE_CONFIG['include_comments'] else '否'}")
-    print(f"  - JSON缩进空格数: {MARKET_STRUCTURE_CONFIG['indent']}")
-    print(f"  - 允许中文字符: {'是' if not MARKET_STRUCTURE_CONFIG['ensure_ascii'] else '否'}")
-    print()
-
-    # 运行主程序
-    asyncio.run(main())
+        # 获取事件循环
+        loop = asyncio.get_event_loop()
+        
+        # 启动系统
+        loop.run_until_complete(trading_system.start())
+        
+        # 保持系统运行
+        try:
+            loop.run_forever()
+        except KeyboardInterrupt:
+            print("\n接收到停止信号，正在关闭系统...")
+            loop.run_until_complete(trading_system.stop())
+        finally:
+            loop.close()
+            
+    except Exception as e:
+        print(f"系统运行时发生错误: {str(e)}")
+        if 'trading_system' in locals():
+            loop.run_until_complete(trading_system.stop())

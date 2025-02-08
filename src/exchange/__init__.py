@@ -21,17 +21,13 @@
 Version: 1.0.0
 """
 
-from .common_symbols_finder import CommonSymbolsFinder
-from .exchange_instance import ExchangeInstance
-from .market_processor import MarketProcessor
-from .monitor_manager import MonitorManager
+from .exchange_connection import ExchangeConnection
+from .connection_manager import ConnectionManager
 
 __version__ = '1.0.0'
 __author__ = 'Your Name'
 
 __all__ = [
-    'ExchangeInstance',
-    'MarketProcessor',
-    'CommonSymbolsFinder',
-    'MonitorManager'
+    'ExchangeConnection',
+    'ConnectionManager'
 ]

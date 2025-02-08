@@ -1,0 +1,30 @@
+"""
+配置模块
+包含所有交易所、市场、缓存等相关配置
+"""
+
+from .exchange_config import (
+    REDIS_CONFIG,
+    CACHE_MODE,
+    MARKET_STRUCTURE_CONFIG,
+    EXCHANGES,
+    MARKET_TYPES,
+    QUOTE_CURRENCIES,
+    MONITOR_CONFIG,
+    EXCHANGE_CONFIGS,
+    COMMON_SYMBOLS,
+    SYMBOLS
+)
+
+__all__ = [
+    'REDIS_CONFIG',
+    'CACHE_MODE',
+    'MARKET_STRUCTURE_CONFIG',
+    'EXCHANGES',
+    'MARKET_TYPES',
+    'QUOTE_CURRENCIES',
+    'MONITOR_CONFIG',
+    'EXCHANGE_CONFIGS',
+    'COMMON_SYMBOLS',
+    'SYMBOLS'
+] 

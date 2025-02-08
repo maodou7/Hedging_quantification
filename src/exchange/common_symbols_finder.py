@@ -21,7 +21,7 @@
    - 分类展示结果
 
 使用示例：
-    finder = CommonSymbolsFinder(exchange_instance, market_processor, config)
+    finder = CommonSymbolsFinder(exchange_instance, market_processor, Config)
     
     # 查找共同交易对
     finder.find_common_symbols(['binance', 'okex'])
@@ -56,11 +56,11 @@ class CommonSymbolsFinder:
     属性：
         exchange_instance (ExchangeInstance): 交易所实例管理器
         market_processor (MarketProcessor): 市场数据处理器
-        config (dict): 系统配置信息
+        Config (dict): 系统配置信息
         common_symbols (Dict[str, Dict[str, Set[str]]]): 存储共同交易对的嵌套字典
     
     使用示例：
-        finder = CommonSymbolsFinder(exchange_instance, market_processor, config)
+        finder = CommonSymbolsFinder(exchange_instance, market_processor, Config)
         finder.find_common_symbols(['binance', 'okex'])
         finder.print_common_symbols()
     """
