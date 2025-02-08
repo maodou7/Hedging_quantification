@@ -1,8 +1,8 @@
-# Hedging Quantification
+# Hedging Quantification - 对冲量化系统
+
+[English](README.md) | [简体中文](README_CN.md)
 
 A high-performance cryptocurrency exchange monitoring system that supports real-time price tracking across multiple exchanges.
-
-[中文文档](README_CN.md)
 
 ## Features
 

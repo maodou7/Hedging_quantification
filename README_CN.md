@@ -1,8 +1,8 @@
 # Hedging Quantification - 对冲量化系统
 
-一个高性能的加密货币交易所监控系统，支持多交易所实时价格追踪。
+[English](README.md) | [简体中文](README_CN.md)
 
-[English Document](README.md)
+一个高性能的加密货币交易所监控系统，支持多交易所实时价格追踪。
 
 ## 特性
 
