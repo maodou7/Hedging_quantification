@@ -4,6 +4,8 @@
 
 一个高性能的加密货币交易所监控系统，支持多交易所实时价格追踪。
 
+> **注意**：这是一个私有仓库，请确保您有必要的访问权限。
+
 ## 特性
 
 - **多交易所支持**：同时监控多个加密货币交易所
@@ -20,21 +22,22 @@
 
 ## 系统要求
 
-- Python 3.8+
+- Python 3.12.8
 - ccxt
-- ccxt.pro
 - asyncio
 
 ## 安装
 
-1. 克隆仓库：
+1. 确保您有权访问私有仓库并已配置 SSH 密钥或访问令牌。
+
+2. 克隆仓库：
 
 ```bash
-git clone https://github.com/yourusername/Hedging_quantification.git
+git clone git@github.com:maodou7/Hedging_quantification.git
 cd Hedging_quantification
 ```
 
-2. 安装依赖：
+3. 安装依赖：
 
 ```bash
 pip install -r requirements.txt
@@ -122,15 +125,3 @@ python main.py
 - 自动重连机制
 - 详细的错误报告
 - 数据验证检查
-
-## 贡献
-
-1. Fork 本仓库
-2. 创建特性分支
-3. 提交更改
-4. 推送到分支
-5. 创建 Pull Request
-
-## 许可证
-
-本项目采用 MIT 许可证 - 查看 LICENSE 文件了解详情

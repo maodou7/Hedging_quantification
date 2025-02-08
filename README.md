@@ -4,6 +4,11 @@
 
 A high-performance cryptocurrency exchange monitoring system that supports real-time price tracking across multiple exchanges.
 
+[![Python Version](https://img.shields.io/badge/python-3.12.8-blue.svg)](https://www.python.org/downloads/release/python-3128/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Documentation Status](https://readthedocs.org/projects/hedging-quantification/badge/?version=latest)](https://hedging-quantification.readthedocs.io/en/latest/?badge=latest)
+
 ## Features
 
 - **Multi-Exchange Support**: Simultaneously monitor multiple cryptocurrency exchanges
@@ -18,19 +23,23 @@ A high-performance cryptocurrency exchange monitoring system that supports real-
 - **Error Handling**: Robust error handling and automatic reconnection
 - **Cross-Platform**: Optimized for both Windows and Linux systems
 
+## Documentation
+
+Full documentation is available at [hedging-quantification.readthedocs.io](https://hedging-quantification.readthedocs.io/).
+
 ## Requirements
 
-- Python 3.8+
+- Python 3.12.8
 - ccxt
-- ccxt.pro
 - asyncio
+- See [requirements.txt](requirements.txt) for full list
 
 ## Installation
 
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/Hedging_quantification.git
+git clone https://github.com/maodou7/Hedging_quantification.git
 cd Hedging_quantification
 ```
 
@@ -123,14 +132,41 @@ Example output:
 - Detailed error reporting
 - Data validation checks
 
+## Testing
+
+Run the test suite:
+
+```bash
+pytest tests/
+```
+
+For coverage report:
+
+```bash
+coverage run -m pytest tests/
+coverage report
+```
+
+## Code Style
+
+This project uses [Black](https://github.com/psf/black) for code formatting and follows PEP 8 guidelines. To format your code:
+
+```bash
+black .
+```
+
 ## Contributing
 
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+## Security
+
+For security issues, please see our [Security Policy](SECURITY.md).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a list of changes.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
