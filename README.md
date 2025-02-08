@@ -1,103 +1,136 @@
-# 加密货币交易所数据监控系统 / Cryptocurrency Exchange Data Monitoring System
+# Hedging Quantification
 
-## 项目简介 / Project Description
+A high-performance cryptocurrency exchange monitoring system that supports real-time price tracking across multiple exchanges.
 
-这是一个高性能的异步加密货币交易所数据监控系统。该系统能够同时监控多个交易所的市场数据，并通过异步 IO 和并发处理来实现最大性能。
+[中文文档](README_CN.md)
 
-This is a high-performance asynchronous cryptocurrency exchange data monitoring system. The system can simultaneously monitor market data from multiple exchanges and achieve maximum performance through asynchronous IO and concurrent processing.
+## Features
 
-## 主要特性 / Key Features
+- **Multi-Exchange Support**: Simultaneously monitor multiple cryptocurrency exchanges
+- **Real-time Price Monitoring**: WebSocket-based real-time price updates
+- **Market Type Support**: Support for spot, futures, and margin markets
+- **High Precision**: Advanced price precision handling following CCXT standards
+- **Market Parameters**: Comprehensive market information including:
+  - Minimum purchase amount
+  - Leverage range
+  - Trading fees (maker/taker)
+  - Price and amount precision
+- **Error Handling**: Robust error handling and automatic reconnection
+- **Cross-Platform**: Optimized for both Windows and Linux systems
 
-- 多交易所并发监控 / Multi-exchange concurrent monitoring
-- 自动错误恢复和重连机制 / Automatic error recovery and reconnection mechanism
-- 高性能优化 / High-performance optimization
-- 实时数据处理和状态更新 / Real-time data processing and status updates
-- 智能系统适配 / Intelligent system adaptation
-  - Linux: 使用 uvloop 实现最高性能 / Uses uvloop for maximum performance on Linux
-  - Windows: 使用原生事件循环 / Uses native event loop on Windows
+## Requirements
 
-## 系统要求 / System Requirements
+- Python 3.8+
+- ccxt
+- ccxt.pro
+- asyncio
 
-### 操作系统 / Operating System
+## Installation
 
-- Linux (推荐 / Recommended)
-- Windows
-- 其他类 Unix 系统 / Other Unix-like systems
-
-### Python 版本 / Python Version
-
-- Python 3.7+
-
-## 安装指南 / Installation Guide
-
-1. 克隆仓库 / Clone the repository:
+1. Clone the repository:
 
 ```bash
-git clone [repository-url]
+git clone https://github.com/yourusername/Hedging_quantification.git
+cd Hedging_quantification
 ```
 
-2. 安装依赖 / Install dependencies:
-
-对于 Windows 系统 / For Windows:
+2. Install dependencies:
 
 ```bash
-pip install -r requirement.txt
+pip install -r requirements.txt
 ```
 
-对于 Linux 系统 / For Linux:
+## Configuration
 
-```bash
-pip install -r requirement_linux.txt
+Edit `Config/exchange_config.py` to configure:
+
+- Exchanges to monitor
+- Market types (spot/futures/margin)
+- Quote currencies
+- Market structure settings
+
+Example configuration:
+
+```python
+EXCHANGES = ['binance', 'bybit', 'okx']
+MARKET_TYPES = {
+    'spot': True,
+    'future': True,
+    'margin': False
+}
+QUOTE_CURRENCIES = ['USDT', 'BTC']
 ```
 
-## 配置说明 / Configuration Guide
+## Usage
 
-1. 在`Config/exchange_config.py`中配置以下参数 / Configure the following parameters in `Config/exchange_config.py`:
-   - 交易所列表 / Exchange list
-   - 市场类型 / Market types
-   - 计价货币 / Quote currencies
-   - 市场结构配置 / Market structure configuration
-
-## 使用方法 / Usage
-
-直接运行主程序 / Run the main program directly:
+Run the main program:
 
 ```bash
 python main.py
 ```
 
-使用 Ctrl+C 可以安全地停止程序 / Use Ctrl+C to safely stop the program
+The program will:
 
-## 项目结构 / Project Structure
+1. Initialize exchange connections
+2. Find common trading pairs
+3. Start real-time price monitoring
+4. Output formatted JSON price data
 
+Example output:
+
+```json
+{
+  "exchange": "binance",
+  "type": "spot",
+  "symbol": "BTC/USDT",
+  "quote": "USDT",
+  "price": "45123.45",
+  "min_cost": "5.0",
+  "leverage": "1-100",
+  "fees": {
+    "taker": "0.001",
+    "maker": "0.001"
+  },
+  "precision": {
+    "price": 2,
+    "amount": 6
+  }
+}
 ```
-├── Config/                 # 配置文件目录 / Configuration directory
-├── ExchangeModules/       # 交易所模块 / Exchange modules
-├── market_structures/      # 市场结构数据 / Market structure data
-├── main.py                # 主程序 / Main program
-├── requirement.txt        # Windows依赖要求 / Windows dependencies
-└── requirement_linux.txt  # Linux依赖要求 / Linux dependencies
-```
 
-## 注意事项 / Notes
+## Architecture
 
-- 运行前请确保网络连接稳定 / Ensure stable network connection before running
-- 建议在高性能服务器上运行以获得最佳性能 / Recommended to run on high-performance servers for best results
-- 程序会自动处理断线重连，无需手动干预 / Program automatically handles disconnections and reconnections
-- Linux 系统下会自动使用 uvloop 优化性能 / Automatically uses uvloop for performance optimization on Linux
+- `main.py`: Main program entry point
+- `ExchangeModules/`:
+  - `exchange_instance.py`: Exchange connection management
+  - `monitor_manager.py`: Price monitoring system
+  - `market_processor.py`: Market data processing
+  - `common_symbols_finder.py`: Common trading pair detection
+  - `market_structure_fetcher.py`: Market structure handling
 
-## 性能优化 / Performance Optimization
+## Performance Optimization
 
-- 使用异步 IO 实现高并发 / Uses async IO for high concurrency
-- 自动选择最优事件循环 / Automatically selects optimal event loop
-- 线程池优化 / Thread pool optimization
-- 智能内存管理 / Intelligent memory management
+- Automatic event loop optimization:
+  - Linux: Uses `uvloop` for maximum performance
+  - Windows: Uses `WindowsSelectorEventLoopPolicy`
+- Efficient WebSocket connections
+- Optimized data structures for quick lookups
 
-## 错误处理 / Error Handling
+## Error Handling
 
-系统包含完整的错误处理机制 / The system includes comprehensive error handling:
+- Comprehensive error detection
+- Automatic reconnection mechanism
+- Detailed error reporting
+- Data validation checks
 
-- 自动重连机制 / Automatic reconnection mechanism
-- 错误日志记录 / Error logging
-- 状态监控 / Status monitoring
-- 异常恢复 / Exception recovery
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details
