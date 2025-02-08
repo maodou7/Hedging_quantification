@@ -22,6 +22,9 @@ A high-performance cryptocurrency exchange monitoring system that supports real-
   - Price and amount precision
 - **Error Handling**: Robust error handling and automatic reconnection
 - **Cross-Platform**: Optimized for both Windows and Linux systems
+- **Performance Optimization**: Utilizes uvloop on Linux and optimized event loops on Windows
+- **Data Validation**: Comprehensive input validation and error checking
+- **Extensible Architecture**: Easy to add new exchanges and features
 
 ## Documentation
 
@@ -175,17 +178,32 @@ Example output:
 ## Performance Optimization
 
 - Automatic event loop optimization:
-  - Linux: Uses `uvloop` for maximum performance
-  - Windows: Uses `WindowsSelectorEventLoopPolicy`
-- Efficient WebSocket connections
+  - Linux: Uses `uvloop` for maximum performance (up to 2-4x faster than default)
+  - Windows: Uses `WindowsSelectorEventLoopPolicy` for optimal performance
+- Efficient WebSocket connections with automatic reconnection
 - Optimized data structures for quick lookups
+- Memory-efficient data processing
+- Concurrent exchange processing
+- Connection pooling for REST API calls
 
-## Error Handling
+## Monitoring and Debugging
 
-- Comprehensive error detection
-- Automatic reconnection mechanism
-- Detailed error reporting
-- Data validation checks
+- Real-time performance metrics
+- Detailed logging with different levels
+- WebSocket connection status monitoring
+- Memory usage tracking
+- Response time measurements
+- Error rate monitoring
+
+## Best Practices
+
+1. Always use the virtual environment
+2. Regularly update dependencies
+3. Monitor system resources
+4. Back up configuration files
+5. Check logs regularly
+6. Keep API keys secure
+7. Use appropriate timeouts for API calls
 
 ## Testing
 
