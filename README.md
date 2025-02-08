@@ -43,9 +43,64 @@ git clone https://github.com/maodou7/Hedging_quantification.git
 cd Hedging_quantification
 ```
 
-2. Install dependencies:
+2. Create and activate environment:
+
+Option 1 - Using Anaconda (Recommended):
 
 ```bash
+# List all environments
+conda env list
+
+# Create a new environment with Python 3.12.8
+conda create -n hedging python=3.12.8
+
+# Activate the environment
+conda activate hedging
+
+# Deactivate the environment when done
+conda deactivate
+
+# Remove environment if needed
+conda remove -n hedging --all
+```
+
+Option 2 - Using venv:
+
+For Linux/macOS:
+
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+For Windows:
+
+```bash
+python -m venv venv
+.\venv\Scripts\activate
+```
+
+3. Install dependencies:
+
+For Linux/macOS:
+
+```bash
+# Install system dependencies
+sudo apt-get update
+sudo apt-get install python3-dev build-essential
+
+# Install Python dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Install uvloop for better performance (Linux only)
+pip install uvloop
+```
+
+For Windows:
+
+```bash
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 

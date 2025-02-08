@@ -28,18 +28,71 @@
 
 ## 安装
 
-1. 确保您有权访问私有仓库并已配置 SSH 密钥或访问令牌。
-
-2. 克隆仓库：
+1. 克隆仓库：
 
 ```bash
-git clone git@github.com:maodou7/Hedging_quantification.git
+git clone https://github.com/maodou7/Hedging_quantification.git
 cd Hedging_quantification
+```
+
+2. 创建并激活环境：
+
+方式一 - 使用 Anaconda（推荐）：
+
+```bash
+# 列出所有环境
+conda env list
+
+# 创建新的 Python 3.12.8 环境
+conda create -n hedging python=3.12.8
+
+# 激活环境
+conda activate hedging
+
+# 使用完毕后退出环境
+conda deactivate
+
+# 如需删除环境
+conda remove -n hedging --all
+```
+
+方式二 - 使用 venv：
+
+Linux/macOS 系统：
+
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+Windows 系统：
+
+```bash
+python -m venv venv
+.\venv\Scripts\activate
 ```
 
 3. 安装依赖：
 
+Linux/macOS 系统：
+
 ```bash
+# 安装系统依赖
+sudo apt-get update
+sudo apt-get install python3-dev build-essential
+
+# 安装Python依赖
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# 安装uvloop以提升性能（仅Linux系统）
+pip install uvloop
+```
+
+Windows 系统：
+
+```bash
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
