@@ -19,6 +19,9 @@
   - 价格和数量精度
 - **错误处理**：强大的错误处理和自动重连机制
 - **跨平台**：针对 Windows 和 Linux 系统优化
+- **性能优化**：Linux 系统使用 uvloop，Windows 系统使用优化的事件循环
+- **数据验证**：全面的输入验证和错误检查
+- **可扩展架构**：易于添加新的交易所和功能
 
 ## 系统要求
 
@@ -167,14 +170,68 @@ python main.py
 ## 性能优化
 
 - 自动事件循环优化：
-  - Linux: 使用 `uvloop` 获得最佳性能
-  - Windows: 使用 `WindowsSelectorEventLoopPolicy`
-- 高效的 WebSocket 连接
+  - Linux 系统：使用 `uvloop` 获得最佳性能（比默认快 2-4 倍）
+  - Windows 系统：使用 `WindowsSelectorEventLoopPolicy` 实现最优性能
+- 高效的 WebSocket 连接，具备自动重连功能
 - 优化的数据结构，实现快速查找
+- 内存效率优化的数据处理
+- 并发交易所处理
+- REST API 调用的连接池管理
 
-## 错误处理
+## 监控和调试
 
-- 全面的错误检测
-- 自动重连机制
-- 详细的错误报告
-- 数据验证检查
+- 实时性能指标
+- 多级别详细日志
+- WebSocket 连接状态监控
+- 内存使用跟踪
+- 响应时间测量
+- 错误率监控
+
+## 最佳实践
+
+1. 始终使用虚拟环境
+2. 定期更新依赖包
+3. 监控系统资源
+4. 备份配置文件
+5. 定期检查日志
+6. 确保 API 密钥安全
+7. 为 API 调用设置适当的超时时间
+
+## 测试
+
+运行测试套件：
+
+```bash
+pytest tests/
+```
+
+生成覆盖率报告：
+
+```bash
+coverage run -m pytest tests/
+coverage report
+```
+
+## 代码风格
+
+本项目使用 [Black](https://github.com/psf/black) 进行代码格式化，并遵循 PEP 8 规范。格式化代码：
+
+```bash
+black .
+```
+
+## 贡献
+
+欢迎贡献！详情请参阅 [贡献指南](CONTRIBUTING.md)。
+
+## 安全
+
+关于安全问题，请参阅我们的 [安全政策](SECURITY.md)。
+
+## 更新日志
+
+查看 [CHANGELOG.md](CHANGELOG.md) 了解变更历史。
+
+## 许可证
+
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
