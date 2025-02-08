@@ -39,8 +39,13 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import sys
 
-from Environment.exchange_config import EXCHANGES, EXCHANGE_CONFIGS, MARKET_TYPES, QUOTE_CURRENCIES
-from ExchangeModules import ExchangeInstance, MonitorManager
+from Environment.exchange_config import (
+    EXCHANGES, EXCHANGE_CONFIGS, MARKET_TYPES, 
+    QUOTE_CURRENCIES, MARKET_STRUCTURE_CONFIG
+)
+from ExchangeModules import ExchangeInstance, MonitorManager, CommonSymbolsFinder
+from ExchangeModules.market_structure_fetcher import MarketStructureFetcher
+from ExchangeModules.market_processor import MarketProcessor
 
 
 async def process_exchange_data(exchange_id: str, monitor_manager: MonitorManager, queue: asyncio.Queue):
@@ -122,6 +127,34 @@ async def main():
         print("\n正在初始化交易所连接...")
         await monitor_manager.initialize(config['exchanges'])
 
+        # 查找共同交易对
+        print("\n正在查找共同交易对...")
+        market_processor = MarketProcessor(exchange_instance)  # 传入exchange_instance参数
+        symbol_finder = CommonSymbolsFinder(exchange_instance, market_processor, config)
+        symbol_finder.find_common_symbols(config['exchanges'])
+        
+        # 获取共同交易对列表
+        common_symbols_by_type = {}
+        enabled_market_types = market_processor.get_enabled_market_types(config['market_types'])
+        for market_type in enabled_market_types:
+            symbols = []
+            for quote in config['quote_currencies']:
+                symbols.extend(list(symbol_finder.common_symbols[market_type][quote]))
+            if symbols:  # 只添加非空的市场类型
+                common_symbols_by_type[market_type] = symbols
+        
+        # 获取市场结构
+        print("\n正在获取市场结构...")
+        market_structure_fetcher = MarketStructureFetcher(
+            exchange_instance,
+            output_dir=MARKET_STRUCTURE_CONFIG['output_dir']
+        )
+        market_structure_fetcher.set_common_symbols(common_symbols_by_type)
+        market_structure_fetcher.fetch_and_save_market_structures(
+            config['exchanges'],
+            include_comments=MARKET_STRUCTURE_CONFIG['include_comments']
+        )
+
         # 开始监控
         monitor_manager.start_monitoring(config['exchanges'])
 
@@ -201,6 +234,13 @@ if __name__ == "__main__":
     print("市场类型:")
     for market_type, enabled in MARKET_TYPES.items():
         print(f"  - {market_type}: {'启用' if enabled else '禁用'}")
+        
+    print("\n市场结构保存配置:")
+    print(f"  - 保存目录: {MARKET_STRUCTURE_CONFIG['output_dir']}")
+    print(f"  - 包含中文注释: {'是' if MARKET_STRUCTURE_CONFIG['include_comments'] else '否'}")
+    print(f"  - JSON缩进空格数: {MARKET_STRUCTURE_CONFIG['indent']}")
+    print(f"  - 允许中文字符: {'是' if not MARKET_STRUCTURE_CONFIG['ensure_ascii'] else '否'}")
+    print()
 
     # 运行主程序
     asyncio.run(main())

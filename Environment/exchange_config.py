@@ -22,6 +22,14 @@ MARKET_TYPES = {
     'option': False  # 是否开启期权
 }
 
+# 市场结构保存配置
+MARKET_STRUCTURE_CONFIG = {
+    'include_comments': True,  # 是否在保存的市场结构数据中包含中文注释
+    'output_dir': 'market_structures',  # 市场结构数据保存目录
+    'indent': 2,  # JSON文件缩进空格数
+    'ensure_ascii': False  # 是否确保ASCII编码（设为False以正确显示中文）
+}
+
 # 交易所特殊配置
 # type_configs: 各交易所不同市场类型的具体配置
 EXCHANGE_CONFIGS = {
