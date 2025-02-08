@@ -14,7 +14,7 @@
    - 支持多种市场类型
    - 支持多种计价货币
    - 实时价格更新和展示
-   - 支持超高精度价格显示
+   - 符合CCXT精度规范
 
 3. 系统管理
    - 统一的初始化接口
@@ -43,10 +43,10 @@
 - 确保网络连接稳定
 - 正确配置交易所API参数
 - 监控任务应在异步环境中运行
+- 价格精度遵循CCXT规范
 """
 
 import json
-from decimal import Decimal
 from typing import List
 
 from .common_symbols_finder import CommonSymbolsFinder
@@ -156,7 +156,7 @@ class MonitorManager:
         监控单个交易对的价格
         
         此方法通过WebSocket获取单个交易对的实时价格数据，
-        并在成功获取数据时打印价格信息。
+        并在成功获取数据时打印价格信息。价格精度处理遵循CCXT规范。
         
         Args:
             exchange_id (str): 交易所ID
@@ -166,30 +166,32 @@ class MonitorManager:
             quote (str): 计价货币
             
         注意：
-            - 价格获取失败会打印错误信息但不会中断监控
-            - 此方法是内部使用的，通常不应直接调用
+            - 价格精度根据交易所规则自动处理
+            - 使用CCXT的price_to_precision方法确保精度正确
         """
         try:
             ticker = await exchange.watch_ticker(symbol)
             if ticker and ticker.get('last'):
-                self._print_ticker_info(exchange_id, market_type, symbol, quote, ticker['last'])
+                # 使用交易所的price_to_precision方法处理价格精度
+                formatted_price = exchange.price_to_precision(symbol, ticker['last'])
+                self._print_ticker_info(exchange_id, market_type, symbol, quote, formatted_price)
         except Exception as e:
             print(f"获取 {exchange_id} 的 {symbol} 数据时发生错误: {str(e)}")
 
     def _print_ticker_info(self, exchange_id: str, market_type: str,
-                           symbol: str, quote: str, price: float):
+                           symbol: str, quote: str, price: str):
         """
         打印价格信息
         
-        此方法将价格信息格式化为JSON并打印输出。使用Decimal处理高精度价格，
-        避免科学计数法表示，保持价格的完整精度。
+        此方法将价格信息格式化为JSON并打印输出。价格已经通过CCXT的精度处理方法处理，
+        确保符合交易所的精度要求。
         
         Args:
             exchange_id (str): 交易所ID
             market_type (str): 市场类型
             symbol (str): 交易对符号
             quote (str): 计价货币
-            price (float): 最新价格
+            price (str): 已格式化的价格字符串
             
         输出格式示例：
             {
@@ -199,20 +201,16 @@ class MonitorManager:
                 "quote": "USDT",
                 "price": "0.000009404"
             }
+            
+        注意：
+            price参数应该已经是通过交易所的price_to_precision方法处理过的字符串
         """
-        # 使用Decimal处理价格，避免科学计数法
-        price_decimal = Decimal(str(price))
-        formatted_price = format(price_decimal, 'f')  # 使用普通十进制格式
-        
-        # 移除末尾多余的0，但保留必要的小数位
-        formatted_price = formatted_price.rstrip('0').rstrip('.') if '.' in formatted_price else formatted_price
-        
         print(json.dumps({
             "exchange": exchange_id,
             "type": market_type,
             "symbol": symbol,
             "quote": quote,
-            "price": formatted_price
+            "price": price
         }, ensure_ascii=False))
 
     async def _handle_monitor_error(self, exchange_id: str, exchange, error: Exception):
