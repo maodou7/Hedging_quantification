@@ -2,26 +2,36 @@
 测试Redis连接
 """
 
+import asyncio
+import os
 from src.core.redis_manager import RedisManager
-import sys
+import logging
 
-def test_redis_connection():
-    try:
-        print("正在初始化Redis管理器...")
-        rm = RedisManager()
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+async def test_redis_connection():
+    """测试Redis连接"""
+    redis_manager = RedisManager()
+    
+    # 初始化连接
+    success = await redis_manager.initialize()
+    if success:
+        print("Redis连接成功！")
         
-        print("正在测试Redis连接...")
-        response = rm.redis_client.ping()
+        # 测试基本操作
+        await redis_manager.set("test_key", "test_value")
+        value = await redis_manager.get("test_key")
+        print(f"测试键值对: {value}")
         
-        if response:
-            print("Redis连接成功！")
-            print(f"服务器信息: {rm.redis_client.info()}")
-        else:
-            print("Redis连接失败：无法ping通服务器")
-            
-    except Exception as e:
-        print(f"Redis连接出错: {str(e)}")
-        sys.exit(1)
-        
+        # 清理
+        await redis_manager.delete("test_key")
+        await redis_manager.cleanup()
+    else:
+        print("Redis连接失败！")
+
 if __name__ == "__main__":
-    test_redis_connection()
+    asyncio.run(test_redis_connection())

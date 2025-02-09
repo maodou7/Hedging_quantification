@@ -20,9 +20,11 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
+# 环境文件
+.env
+.venv
 env/
+venv/
 ENV/
 
 # IDE
@@ -31,30 +33,24 @@ ENV/
 *.swp
 *.swo
 
-# Project specific
-cache/
-checkpoints/
-models/
-market_structures/
-*.log
-.env
-
-# Testing
-.coverage
-htmlcov/
-.pytest_cache/
-
-# Logs
+# 日志和缓存
 logs/
 *.log
-npm-debug.log*
+.cache/
+.pytest_cache/
 
-# Runtime data
-pids/
-*.pid
-*.seed
-*.pid.lock
+# 数据文件
+data/
+*.csv
+*.json
+*.pkl
 
-# OS specific
+# 模型文件
+models/
+*.pth
+*.h5
+*.model
+
+# 系统文件
 .DS_Store
 Thumbs.db 

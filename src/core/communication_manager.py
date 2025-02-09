@@ -1,20 +1,19 @@
 """
 通信管理器模块
-
-实现不同的进程间通信方式：
-1. Redis通信 - 用于Redis缓存模式
-2. 共享内存通信 - 用于本地缓存模式
-3. 消息队列通信 - 用于无缓存模式
+负责进程间通信
 """
 
-import mmap
-import json
 import asyncio
-from multiprocessing import Queue, shared_memory
-from typing import Dict, Any, Callable
+import json
+import logging
+from typing import Dict, Any, Optional, Callable
+from datetime import datetime
 from abc import ABC, abstractmethod
-from src.Config.exchange_config import REDIS_CONFIG, CACHE_MODE
-from src.core.redis_manager import RedisManager
+import redis.asyncio as aioredis
+from src.config.exchange import REDIS_CONFIG
+from src.config.cache import CacheStrategy, CACHE_CONFIG
+
+logger = logging.getLogger(__name__)
 
 class CommunicationManager(ABC):
     """通信管理器基类"""
@@ -203,9 +202,10 @@ class MessageQueueManager(CommunicationManager):
 
 def create_communication_manager() -> CommunicationManager:
     """创建通信管理器工厂方法"""
-    if CACHE_MODE == 1:  # Redis缓存
+    cache_strategy = CACHE_CONFIG["strategy"]
+    if cache_strategy == CacheStrategy.REDIS:  # Redis缓存
         return RedisManager()
-    elif CACHE_MODE == 2:  # 本地缓存
+    elif cache_strategy == CacheStrategy.LOCAL:  # 本地缓存
         return SharedMemoryManager()
     else:  # 无缓存
-        return MessageQueueManager() 
+        return MessageQueueManager()

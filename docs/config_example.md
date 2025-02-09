@@ -1,185 +1,295 @@
-# 配置示例
+# 配置示例文档
 
-## 配置文件结构
+## 1. 环境配置 (.env)
 
-配置文件采用 Python 字典格式，包含以下主要部分：
+```bash
+# 基础环境配置
+ENV=production
+DEBUG=false
+LOG_LEVEL=INFO
 
-1. 模型训练配置
-2. 模型评估配置
-3. 特征工程配置
-4. 日志配置
+# Redis配置
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=your_password
+REDIS_DB=0
 
-## 完整配置示例
+# 交易所API配置
+BINANCE_API_KEY=your_api_key
+BINANCE_SECRET=your_secret
+BYBIT_API_KEY=your_api_key
+BYBIT_SECRET=your_secret
+OKX_API_KEY=your_api_key
+OKX_SECRET=your_secret
+OKX_PASSWORD=your_password
+HUOBI_API_KEY=your_api_key
+HUOBI_SECRET=your_secret
+GATEIO_API_KEY=your_api_key
+GATEIO_SECRET=your_secret
+```
+
+## 2. 功能开关配置
 
 ```python
-CONFIG = {
-    'model_training': {
-        'enabled': True,
-        'config': {
-            'default_model': 'lstm',
-            'test_size': 0.2
-        },
-        'lstm': {
-            'enabled': True,
-            'units': 64,
-            'dropout': 0.2,
-            'batch_size': 32,
-            'epochs': 100,
-            'learning_rate': 0.001,
-            'input_size': 33,
-            'early_stopping': {
-                'patience': 10
+FEATURE_FLAGS = {
+    # 市场监控配置
+    "monitoring": {
+        "enabled": True,
+        "price_update_interval": 1,
+        "depth_update_interval": 5,
+        "trade_update_interval": 1
+    },
+
+    # 机器学习配置
+    "machine_learning": {
+        "enabled": True,
+        "min_data_points": 1000,
+        "update_interval": 3600,
+        "models": {
+            "lstm": {
+                "enabled": True,
+                "batch_size": 32,
+                "epochs": 100,
+                "sequence_length": 60
             },
-            'checkpointing': {
-                'enabled': True,
-                'filepath': 'models/lstm_best.pth'
+            "xgboost": {
+                "enabled": False
             }
-        },
-        'xgboost': {
-            'enabled': True,
-            'n_estimators': 100,
-            'max_depth': 6,
-            'learning_rate': 0.1,
-            'objective': 'reg:squarederror',
-            'eval_metric': 'rmse',
-            'early_stopping_rounds': 10
         }
     },
 
-    'model_evaluation': {
-        'metrics': ['mse', 'rmse', 'mae', 'r2'],
-        'cv_folds': 5,
-        'test_size': 0.2
-    },
-
-    'feature_engineering': {
-        'sequence_length': 10,
-        'target_horizon': 1,
-        'feature_selection': {
-            'enabled': True,
-            'method': 'correlation',
-            'threshold': 0.1
-        },
-        'normalization': {
-            'method': 'standard',
-            'clip_outliers': True
-        }
-    },
-
-    'logging': {
-        'level': 'INFO',
-        'format': '%(asctime)s - %(levelname)s - %(message)s',
-        'file': {
-            'enabled': True,
-            'path': 'logs/training.log'
+    # 交易配置
+    "trading": {
+        "enabled": True,
+        "max_open_orders": 5,
+        "min_profit_threshold": 0.002,
+        "risk_management": {
+            "max_position_size": 1000,
+            "max_daily_loss": 100,
+            "max_drawdown": 0.1
         }
     }
 }
 ```
 
-## 配置项说明
+## 3. 策略配置示例
 
-### 1. 模型训练配置
-
-#### 通用配置
-
-- `enabled`: 是否启用模型训练
-- `default_model`: 默认使用的模型类型
-- `test_size`: 测试集比例
-
-#### LSTM 配置
-
-- `units`: LSTM 隐藏层大小
-- `dropout`: Dropout 比率
-- `batch_size`: 批次大小
-- `epochs`: 训练轮数
-- `learning_rate`: 学习率
-- `early_stopping`: 早停设置
-  - `patience`: 早停等待轮数
-- `checkpointing`: 模型检查点设置
-  - `enabled`: 是否启用检查点
-  - `filepath`: 检查点保存路径
-
-#### XGBoost 配置
-
-- `n_estimators`: 树的数量
-- `max_depth`: 树的最大深度
-- `learning_rate`: 学习率
-- `objective`: 目标函数
-- `eval_metric`: 评估指标
-- `early_stopping_rounds`: 早停轮数
-
-### 2. 模型评估配置
-
-- `metrics`: 评估指标列表
-- `cv_folds`: 交叉验证折数
-- `test_size`: 测试集比例
-
-### 3. 特征工程配置
-
-- `sequence_length`: 序列长度
-- `target_horizon`: 预测目标时间跨度
-- `feature_selection`: 特征选择设置
-  - `enabled`: 是否启用特征选择
-  - `method`: 特征选择方法
-  - `threshold`: 选择阈值
-- `normalization`: 数据归一化设置
-  - `method`: 归一化方法
-  - `clip_outliers`: 是否裁剪异常值
-
-### 4. 日志配置
-
-- `level`: 日志级别
-- `format`: 日志格式
-- `file`: 文件日志设置
-  - `enabled`: 是否启用文件日志
-  - `path`: 日志文件路径
-
-## 使用示例
+### 3.1 三角套利配置
 
 ```python
-from src.core.exchange_config import get_ml_config
-from src.ml.model_trainer import ModelTrainer
-
-# 获取配置
-config = get_ml_config()
-
-# 创建训练器实例
-trainer = ModelTrainer()
-
-# 训练模型
-model_id, metrics, history = trainer.train_model(X, y, model_type=config['model_training']['config']['default_model'])
+"triangular_arbitrage": {
+    "enabled": True,
+    "min_profit_threshold": 0.001,
+    "max_trade_amount": 1000,
+    "pairs": [
+        "BTC/USDT",
+        "ETH/USDT",
+        "ETH/BTC"
+    ],
+    "update_interval": 1,
+    "execution_timeout": 5,
+    "risk_control": {
+        "max_slippage": 0.001,
+        "min_volume_threshold": 1000
+    }
+}
 ```
 
-## 配置最佳实践
+### 3.2 统计套利配置
 
-1. 模型选择
+```python
+"statistical_arbitrage": {
+    "enabled": True,
+    "window_size": 3600,
+    "z_score_threshold": 2.0,
+    "pairs": [
+        ["BTC/USDT_binance", "BTC/USDT_okx"],
+        ["ETH/USDT_binance", "ETH/USDT_okx"]
+    ],
+    "position_holding_time": 3600,
+    "max_position_value": 10000,
+    "correlation_threshold": 0.8
+}
+```
 
-   - 对于时序数据，优先使用 LSTM
-   - 对于表格数据，优先使用 XGBoost
-   - 可以同时训练多个模型进行对比
+### 3.3 期现套利配置
 
-2. 超参数调优
+```python
+"spot_future_arbitrage": {
+    "enabled": True,
+    "min_spread_threshold": 0.002,
+    "max_leverage": 5,
+    "funding_rate_threshold": 0.001,
+    "pairs": ["BTC/USDT", "ETH/USDT"],
+    "position_limit": {
+        "BTC": 1.0,
+        "ETH": 10.0
+    },
+    "hedge_ratio": 1.0,
+    "margin_ratio": 0.5
+}
+```
 
-   - LSTM
-     - 序列长度根据数据特点选择
-     - 隐藏层大小通常为特征维度的 1-2 倍
-     - Dropout 率通常在 0.1-0.5 之间
-   - XGBoost
-     - 树的深度通常在 3-10 之间
-     - 学习率通常在 0.01-0.3 之间
+### 3.4 价差套利配置
 
-3. 早停策略
+```python
+"spread_arbitrage": {
+    "enabled": True,
+    "min_profit_threshold": 0.002,
+    "trade_amount": 1000,
+    "max_open_orders": 5,
+    "price_decimal": 8,
+    "amount_decimal": 8,
+    "update_interval": 1,
+    "execution_timeout": 5
+}
+```
 
-   - LSTM：patience 设置为 10-20 轮
-   - XGBoost：early_stopping_rounds 设置为 10-50 轮
+## 4. 混合策略配置
 
-4. 数据划分
+```python
+"mixed_strategy": {
+    "enabled": True,
+    "strategy_weights": {
+        "triangular_arbitrage": 0.3,
+        "statistical_arbitrage": 0.2,
+        "spot_future_arbitrage": 0.3,
+        "spread_arbitrage": 0.2
+    },
+    "capital_allocation": {
+        "triangular_arbitrage": 0.3,
+        "statistical_arbitrage": 0.2,
+        "spot_future_arbitrage": 0.3,
+        "spread_arbitrage": 0.2
+    },
+    "risk_limits": {
+        "max_total_position": 50000,
+        "max_single_strategy_loss": 1000,
+        "max_total_loss": 3000
+    },
+    "rebalance_interval": 3600,
+    "performance_threshold": {
+        "min_sharpe_ratio": 1.5,
+        "min_win_rate": 0.6
+    }
+}
+```
 
-   - 时序数据推荐使用时间序列交叉验证
-   - 测试集比例通常为 20%-30%
+## 5. 市场配置
 
-5. 特征工程
-   - 启用特征选择以减少噪声
-   - 使用标准化或最小最大缩放进行归一化
-   - 考虑添加时间特征
+```python
+# 交易所列表
+EXCHANGES = ["binance", "bybit", "okx", "huobi", "gateio"]
+
+# 市场类型
+MARKET_TYPES = {
+    "spot": True,      # 现货市场
+    "futures": False,  # 期货市场
+    "swap": True      # 永续合约市场
+}
+
+# 报价货币
+QUOTE_CURRENCIES = ["USDT"]
+
+# 默认手续费率
+DEFAULT_FEES = {
+    "maker": 0.001,  # 0.1%
+    "taker": 0.002   # 0.2%
+}
+```
+
+## 6. 指标配置
+
+```python
+INDICATOR_CONFIG = {
+    # 序列长度
+    "sequence_length": 60,
+    "prediction_length": 10,
+
+    # 特征列表
+    "features": [
+        "close",    # 收盘价
+        "volume",   # 成交量
+        "rsi",      # RSI指标
+        "macd",     # MACD指标
+        "bid",      # 买一价
+        "ask",      # 卖一价
+        "spread"    # 买卖价差
+    ],
+
+    # 模型参数
+    "model_params": {
+        "hidden_size": 50,
+        "num_layers": 2,
+        "dropout": 0.2,
+        "learning_rate": 0.001
+    },
+
+    # 训练参数
+    "train_params": {
+        "batch_size": 32,
+        "epochs": 100,
+        "validation_split": 0.2
+    }
+}
+```
+
+## 7. 缓存配置
+
+```python
+# Redis配置
+REDIS_CONFIG = {
+    "host": "localhost",
+    "port": 6379,
+    "password": "",
+    "db": 0,
+    "decode_responses": True
+}
+
+# 市场结构配置
+MARKET_STRUCTURE_CONFIG = {
+    "cache_prefix": "market",
+    "cache_types": ["orderbook", "ticker", "trades"],
+    "default_cache_ttl": 3600,
+    "cache_ttl": {
+        "orderbook": 60,
+        "ticker": 30,
+        "trades": 300
+    }
+}
+```
+
+## 8. 日志配置
+
+```python
+# 日志配置
+LOG_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s [%(levelname)s] %(message)s"
+        }
+    },
+    "handlers": {
+        "default": {
+            "level": "INFO",
+            "formatter": "standard",
+            "class": "logging.StreamHandler"
+        },
+        "file": {
+            "level": "INFO",
+            "formatter": "standard",
+            "class": "logging.FileHandler",
+            "filename": "logs/arbitrage.log"
+        }
+    },
+    "loggers": {
+        "": {
+            "handlers": ["default", "file"],
+            "level": "INFO",
+            "propagate": True
+        }
+    }
+}
+```

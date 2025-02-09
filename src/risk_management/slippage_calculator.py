@@ -4,13 +4,13 @@
 """
 
 from typing import Dict
-from src.Config.exchange_config import RISK_CONFIG
+from src.config.risk import RISK_CONFIG
 
 class SlippageCalculator:
     """滑点计算器"""
     def __init__(self, max_slippage_percent: float = None):
         # 使用风险配置中的最大滑点参数
-        self.max_slippage_percent = max_slippage_percent or 0.001  # 默认0.1%的最大滑点
+        self.max_slippage_percent = max_slippage_percent or RISK_CONFIG.get("max_slippage_percent", 0.001)  # 默认0.1%的最大滑点
     
     def calculate_slippage(self, order_book: Dict, side: str, amount: float, base_price: float) -> float:
         """

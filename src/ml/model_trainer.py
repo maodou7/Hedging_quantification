@@ -5,6 +5,7 @@
 1. 模型训练
 2. 模型评估
 3. 模型预测
+4. 实时更新
 """
 
 import numpy as np
@@ -21,9 +22,12 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import xgboost as xgb
 from src.utils.logger import ArbitrageLogger
-from src.core.exchange_config import get_ml_config
+from src.config.exchange import FEATURE_FLAGS, INDICATOR_CONFIG
 import os
 import uuid
+from collections import defaultdict
+import threading
+import time
 
 class TimeSeriesDataset(Dataset):
     """时间序列数据集"""
@@ -60,7 +64,37 @@ class LSTMModel(nn.Module):
 class ModelTrainer:
     def __init__(self, model_dir="models"):
         self.logger = ArbitrageLogger()
-        self.config = get_ml_config()['model_training']
+        self.config = {
+            'enabled': FEATURE_FLAGS['machine_learning']['enabled'],
+            'config': {
+                'default_model': 'lstm',
+                'test_size': 0.2
+            },
+            'lstm': {
+                'enabled': FEATURE_FLAGS['machine_learning']['models']['lstm']['enabled'],
+                'batch_size': FEATURE_FLAGS['machine_learning']['models']['lstm']['batch_size'],
+                'epochs': FEATURE_FLAGS['machine_learning']['models']['lstm']['epochs'],
+                'sequence_length': FEATURE_FLAGS['machine_learning']['models']['lstm']['sequence_length'],
+                'units': INDICATOR_CONFIG['model_params']['hidden_size'],
+                'dropout': INDICATOR_CONFIG['model_params']['dropout'],
+                'learning_rate': INDICATOR_CONFIG['model_params']['learning_rate'],
+                'early_stopping': {
+                    'patience': 10
+                },
+                'checkpointing': {
+                    'enabled': True,
+                    'filepath': 'models/best_lstm.pth'
+                }
+            },
+            'xgboost': {
+                'enabled': FEATURE_FLAGS['machine_learning']['models']['xgboost']['enabled'],
+                'objective': 'reg:squarederror',
+                'max_depth': 6,
+                'learning_rate': 0.1,
+                'n_estimators': 100,
+                'early_stopping_rounds': 10
+            }
+        }
         self.models = {}
         self.histories = {}
         self.metrics = {}
@@ -504,3 +538,210 @@ class ModelTrainer:
         except Exception as e:
             self.logger.error(f"获取特征重要性时发生错误: {str(e)}")
             return {}
+
+class RealTimeModelTrainer:
+    """实时模型训练器"""
+    def __init__(self, model_dir="models", update_interval=3600):
+        self.model_trainer = ModelTrainer(model_dir)
+        self.price_data = defaultdict(lambda: defaultdict(list))  # {exchange: {symbol: [price_data]}}
+        self.models = {}  # {symbol: model}
+        self.update_interval = update_interval  # 更新间隔（秒）
+        self.is_running = False
+        self.lock = threading.Lock()
+        self.logger = ArbitrageLogger()
+
+    def start(self):
+        """启动实时训练"""
+        self.is_running = True
+        self.training_thread = threading.Thread(target=self._training_loop)
+        self.training_thread.start()
+        self.logger.info("实时模型训练器已启动")
+
+    def stop(self):
+        """停止实时训练"""
+        self.is_running = False
+        if hasattr(self, 'training_thread'):
+            self.training_thread.join()
+        self.logger.info("实时模型训练器已停止")
+
+    def add_price_data(self, exchange: str, symbol: str, price_data: Dict):
+        """添加新的价格数据"""
+        with self.lock:
+            self.price_data[exchange][symbol].append({
+                'price': float(price_data['price']),
+                'volume': float(price_data['volume']),
+                'timestamp': price_data['timestamp'],
+                'bid': float(price_data.get('bid', 0)),
+                'ask': float(price_data.get('ask', 0))
+            })
+
+    def get_prediction(self, exchange: str, symbol: str) -> Optional[float]:
+        """获取价格预测"""
+        try:
+            with self.lock:
+                if symbol not in self.models:
+                    return None
+                
+                # 获取最近的价格数据
+                recent_data = self.price_data[exchange][symbol][-60:]  # 使用最近60个数据点
+                if len(recent_data) < 60:
+                    return None
+
+                # 准备特征
+                features = self._prepare_features(recent_data)
+                
+                # 使用模型预测
+                model = self.models[symbol]
+                if isinstance(model, nn.Module):
+                    model.eval()
+                    with torch.no_grad():
+                        features_tensor = torch.FloatTensor(features).unsqueeze(0)
+                        prediction = model(features_tensor)
+                        return prediction.item()
+                elif isinstance(model, xgb.Booster):
+                    features_matrix = xgb.DMatrix(features.reshape(1, -1))
+                    return model.predict(features_matrix)[0]
+                
+                return None
+
+        except Exception as e:
+            self.logger.error(f"获取预测时发生错误: {str(e)}")
+            return None
+
+    def _training_loop(self):
+        """训练循环"""
+        while self.is_running:
+            try:
+                with self.lock:
+                    # 对每个交易对进行训练
+                    for exchange in self.price_data:
+                        for symbol in self.price_data[exchange]:
+                            if len(self.price_data[exchange][symbol]) >= 1000:  # 确保有足够的数据
+                                self._train_symbol_model(exchange, symbol)
+                
+                # 等待下一次更新
+                time.sleep(self.update_interval)
+                
+            except Exception as e:
+                self.logger.error(f"训练循环中发生错误: {str(e)}")
+                time.sleep(60)  # 发生错误时等待一分钟
+
+    def _train_symbol_model(self, exchange: str, symbol: str):
+        """训练特定交易对的模型"""
+        try:
+            # 准备训练数据
+            data = self.price_data[exchange][symbol]
+            if len(data) < 1000:
+                return
+
+            # 准备特征和标签
+            X, y = self._prepare_training_data(data)
+            
+            # 训练模型
+            model_id, metrics, history = self.model_trainer.train_model(X, y, model_type='lstm')
+            
+            if model_id:
+                self.models[symbol] = self.model_trainer.models[model_id]
+                self.logger.info(f"完成{symbol}的模型训练, 指标: {metrics}")
+            
+        except Exception as e:
+            self.logger.error(f"训练{symbol}模型时发生错误: {str(e)}")
+
+    def _prepare_features(self, price_data: List[Dict]) -> np.ndarray:
+        """准备特征数据"""
+        try:
+            # 提取基本特征
+            prices = np.array([d['price'] for d in price_data])
+            volumes = np.array([d['volume'] for d in price_data])
+            bids = np.array([d['bid'] for d in price_data])
+            asks = np.array([d['ask'] for d in price_data])
+            
+            # 计算技术指标
+            rsi = self._calculate_rsi(prices)
+            macd = self._calculate_macd(prices)
+            
+            # 组合特征
+            features = np.column_stack((prices, volumes, bids, asks, rsi, macd))
+            return features
+            
+        except Exception as e:
+            self.logger.error(f"准备特征时发生错误: {str(e)}")
+            return np.array([])
+
+    def _prepare_training_data(self, price_data: List[Dict]) -> Tuple[np.ndarray, np.ndarray]:
+        """准备训练数据"""
+        try:
+            sequence_length = 60
+            features = self._prepare_features(price_data)
+            
+            X, y = [], []
+            for i in range(len(features) - sequence_length):
+                X.append(features[i:i+sequence_length])
+                y.append(features[i+sequence_length, 0])  # 使用下一个时间点的价格作为标签
+                
+            return np.array(X), np.array(y)
+            
+        except Exception as e:
+            self.logger.error(f"准备训练数据时发生错误: {str(e)}")
+            return np.array([]), np.array([])
+
+    def _calculate_rsi(self, prices: np.ndarray, period: int = 14) -> np.ndarray:
+        """计算RSI指标"""
+        try:
+            deltas = np.diff(prices)
+            seed = deltas[:period+1]
+            up = seed[seed >= 0].sum()/period
+            down = -seed[seed < 0].sum()/period
+            rs = up/down
+            rsi = np.zeros_like(prices)
+            rsi[:period] = 100. - 100./(1. + rs)
+
+            for i in range(period, len(prices)):
+                delta = deltas[i-1]
+                if delta > 0:
+                    upval = delta
+                    downval = 0.
+                else:
+                    upval = 0.
+                    downval = -delta
+
+                up = (up*(period-1) + upval)/period
+                down = (down*(period-1) + downval)/period
+                rs = up/down
+                rsi[i] = 100. - 100./(1. + rs)
+
+            return rsi
+            
+        except Exception as e:
+            self.logger.error(f"计算RSI时发生错误: {str(e)}")
+            return np.zeros_like(prices)
+
+    def _calculate_macd(self, prices: np.ndarray, 
+                       fast_period: int = 12, 
+                       slow_period: int = 26, 
+                       signal_period: int = 9) -> np.ndarray:
+        """计算MACD指标"""
+        try:
+            # 计算EMA
+            ema_fast = np.zeros_like(prices)
+            ema_slow = np.zeros_like(prices)
+            multiplier_fast = 2 / (fast_period + 1)
+            multiplier_slow = 2 / (slow_period + 1)
+            
+            # 初始值
+            ema_fast[0] = prices[0]
+            ema_slow[0] = prices[0]
+            
+            # 计算EMA
+            for i in range(1, len(prices)):
+                ema_fast[i] = (prices[i] - ema_fast[i-1]) * multiplier_fast + ema_fast[i-1]
+                ema_slow[i] = (prices[i] - ema_slow[i-1]) * multiplier_slow + ema_slow[i-1]
+            
+            # 计算MACD线
+            macd_line = ema_fast - ema_slow
+            
+            return macd_line
+            
+        except Exception as e:
+            self.logger.error(f"计算MACD时发生错误: {str(e)}")
+            return np.zeros_like(prices)

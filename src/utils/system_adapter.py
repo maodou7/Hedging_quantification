@@ -7,8 +7,12 @@ import sys
 import platform
 import asyncio
 import logging
+import psutil
+import os
 from typing import Dict, Any
 import aiohttp.resolver
+
+logger = logging.getLogger(__name__)
 
 class SystemAdapter:
     """系统适配器类"""
@@ -36,38 +40,26 @@ class SystemAdapter:
             'system': self.system,
             'python_version': self.python_version,
             'platform': self.platform,
-            'machine': self.machine
+            'machine': self.machine,
+            'cpu_count': psutil.cpu_count(),
+            'memory_total': psutil.virtual_memory().total,
+            'disk_usage': psutil.disk_usage('/').percent,
+            'network_interfaces': len(psutil.net_if_addrs())
         }
         
     def setup_event_loop(self):
         """设置事件循环"""
-        try:
-            if self.is_windows():
-                # Windows系统使用SelectorEventLoop
-                loop = asyncio.SelectorEventLoop()
-                asyncio.set_event_loop(loop)
-                logging.info("[系统适配器] Windows系统使用SelectorEventLoop")
-            elif self.is_linux():
-                # Linux系统使用uvloop
-                try:
-                    import uvloop
-                    uvloop.install()
-                    logging.info("[系统适配器] Linux系统使用uvloop")
-                except ImportError:
-                    logging.warning("[系统适配器] uvloop不可用，使用默认事件循环")
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-            else:
-                # 其他系统使用默认事件循环
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                logging.info(f"[系统适配器] {self.system}系统使用默认事件循环")
-        except Exception as e:
-            logging.error(f"[系统适配器] 设置事件循环失败: {str(e)}")
-            # 使用默认事件循环作为后备方案
+        if self.is_windows():
+            import selectors
+            selector = selectors.SelectSelector()
+            loop = asyncio.SelectorEventLoop(selector)
+            asyncio.set_event_loop(loop)
+            logger.info("已设置Windows系统的事件循环")
+        else:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+            logger.info(f"已设置{self.system}系统的事件循环")
+    
     def get_ccxt_config(self) -> Dict[str, Any]:
         """获取CCXT配置"""
         config = {
@@ -133,4 +125,60 @@ class SystemAdapter:
                 'use_uvloop': False
             })
             
-        return config 
+        return config
+    
+    def setup_process(self):
+        """设置进程"""
+        if self.is_windows():
+            # Windows系统特定的进程设置
+            import win32api
+            import win32con
+            win32api.SetPriorityClass(win32api.GetCurrentProcess(), win32con.HIGH_PRIORITY_CLASS)
+        else:
+            # Unix系统特定的进程设置
+            os.nice(10)
+    
+    def setup_signal_handlers(self):
+        """设置信号处理器"""
+        if not self.is_windows():
+            # Unix系统支持的信号
+            import signal
+            signal.signal(signal.SIGTERM, self._handle_signal)
+            signal.signal(signal.SIGINT, self._handle_signal)
+            signal.signal(signal.SIGHUP, self._handle_signal)
+        else:
+            # Windows系统支持的信号
+            import signal
+            signal.signal(signal.SIGTERM, self._handle_signal)
+            signal.signal(signal.SIGINT, self._handle_signal)
+    
+    def _handle_signal(self, signum, frame):
+        """处理系统信号"""
+        logger.info(f"收到系统信号: {signum}")
+        sys.exit(0)
+    
+    def setup_logging(self):
+        """设置日志"""
+        log_dir = "logs"
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.StreamHandler(),
+                logging.FileHandler(os.path.join(log_dir, 'system.log'))
+            ]
+        )
+    
+    def cleanup(self):
+        """清理系统资源"""
+        try:
+            loop = asyncio.get_event_loop()
+            if not loop.is_closed():
+                loop.close()
+        except Exception as e:
+            logger.error(f"清理事件循环时发生错误: {str(e)}")
+        
+        logger.info("系统资源已清理") 

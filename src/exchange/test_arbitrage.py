@@ -13,10 +13,9 @@ import os
 from datetime import datetime
 from typing import Dict, List
 from .connection_manager import ConnectionManager
-from ..Config.exchange_config import (
-    EXCHANGES, SYMBOLS, COMMON_SYMBOLS,
-    ARBITRAGE_CONFIG, RISK_CONFIG
-)
+from src.config.exchange import EXCHANGES, SYMBOLS, COMMON_SYMBOLS
+from src.config.trading import ARBITRAGE_CONFIG
+from src.config.risk import RISK_CONFIG
 
 class ArbitrageTest:
     """套利测试类"""

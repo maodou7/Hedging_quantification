@@ -1,60 +1,184 @@
 """
-日志工具类
+日志记录器
 
-提供统一的日志记录功能
+负责记录:
+1. 系统运行日志
+2. 交易记录
+3. 价格数据
+4. 错误信息
 """
 
 import logging
 import os
+import json
+import pandas as pd
 from datetime import datetime
-from src.Config.exchange_config import LOGGING_CONFIG
+from typing import Dict, Any, Optional
+from logging.handlers import RotatingFileHandler
 
 class ArbitrageLogger:
+    """套利系统日志记录器"""
+    
     def __init__(self):
         # 创建日志目录
-        log_dir = LOGGING_CONFIG['log_dir']
-        os.makedirs(log_dir, exist_ok=True)
+        self._create_directories()
         
-        # 设置日志文件路径
-        log_file = os.path.join(log_dir, LOGGING_CONFIG['log_file'])
-        
-        # 创建日志记录器
+        # 配置主日志记录器
         self.logger = logging.getLogger('arbitrage')
-        self.logger.setLevel(getattr(logging, LOGGING_CONFIG['log_level']))
+        self.logger.setLevel(logging.INFO)
         
-        # 创建文件处理器
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setLevel(getattr(logging, LOGGING_CONFIG['log_level']))
-        file_handler.setFormatter(logging.Formatter(LOGGING_CONFIG['log_format']))
-        
-        # 创建控制台处理器
+        # 添加控制台处理器
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(getattr(logging, LOGGING_CONFIG['log_level']))
-        console_handler.setFormatter(logging.Formatter(LOGGING_CONFIG['log_format']))
-        
-        # 添加处理器
-        self.logger.addHandler(file_handler)
+        console_handler.setLevel(logging.INFO)
+        console_formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        console_handler.setFormatter(console_formatter)
         self.logger.addHandler(console_handler)
         
+        # 添加文件处理器
+        file_handler = RotatingFileHandler(
+            'logs/arbitrage.log',
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+        file_handler.setLevel(logging.INFO)
+        file_formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        file_handler.setFormatter(file_formatter)
+        self.logger.addHandler(file_handler)
+        
+    def _create_directories(self):
+        """创建必要的目录"""
+        directories = [
+            'logs',
+            'data',
+            'data/price_data',
+            'data/trade_data',
+            'data/order_data',
+            'data/position_data'
+        ]
+        for directory in directories:
+            os.makedirs(directory, exist_ok=True)
+            
     def info(self, message: str):
-        """记录信息级别的日志"""
+        """记录信息日志"""
         self.logger.info(message)
         
-    def warning(self, message: str):
-        """记录警告级别的日志"""
-        self.logger.warning(message)
-        
     def error(self, message: str):
-        """记录错误级别的日志"""
+        """记录错误日志"""
         self.logger.error(message)
         
+    def warning(self, message: str):
+        """记录警告日志"""
+        self.logger.warning(message)
+        
     def debug(self, message: str):
-        """记录调试级别的日志"""
+        """记录调试日志"""
         self.logger.debug(message)
         
-    def critical(self, message: str):
-        """记录严重错误级别的日志"""
-        self.logger.critical(message)
+    def record_trade(self, trade_data: Dict[str, Any]):
+        """记录交易数据"""
+        try:
+            # 添加时间戳
+            trade_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            # 将交易数据写入CSV文件
+            trade_file = 'data/trade_data/trades.csv'
+            df = pd.DataFrame([trade_data])
+            
+            if os.path.exists(trade_file):
+                df.to_csv(trade_file, mode='a', header=False, index=False)
+            else:
+                df.to_csv(trade_file, index=False)
+                
+            # 同时记录到日志
+            self.info(f"新交易记录: {json.dumps(trade_data, ensure_ascii=False)}")
+            
+        except Exception as e:
+            self.error(f"记录交易数据时发生错误: {str(e)}")
+            
+    def record_price(self, symbol: str, exchange: str, price_data: Dict[str, Any], interval: str = "1m"):
+        """记录价格数据"""
+        try:
+            # 添加时间戳和交易所信息
+            price_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            price_data['exchange'] = exchange
+            
+            # 将价格数据写入CSV文件
+            price_file = f'data/price_data/{symbol.replace("/", "_")}_{interval}.csv'
+            df = pd.DataFrame([price_data])
+            
+            if os.path.exists(price_file):
+                df.to_csv(price_file, mode='a', header=False, index=False)
+            else:
+                df.to_csv(price_file, index=False)
+                
+        except Exception as e:
+            self.error(f"记录价格数据时发生错误: {str(e)}")
+            
+    def record_order(self, order_data: Dict[str, Any]):
+        """记录订单数据"""
+        try:
+            # 添加时间戳
+            order_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            # 将订单数据写入CSV文件
+            order_file = 'data/order_data/orders.csv'
+            df = pd.DataFrame([order_data])
+            
+            if os.path.exists(order_file):
+                df.to_csv(order_file, mode='a', header=False, index=False)
+            else:
+                df.to_csv(order_file, index=False)
+                
+            # 同时记录到日志
+            self.info(f"新订单记录: {json.dumps(order_data, ensure_ascii=False)}")
+            
+        except Exception as e:
+            self.error(f"记录订单数据时发生错误: {str(e)}")
+            
+    def record_position(self, position_data: Dict[str, Any]):
+        """记录持仓数据"""
+        try:
+            # 添加时间戳
+            position_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            # 将持仓数据写入CSV文件
+            position_file = 'data/position_data/positions.csv'
+            df = pd.DataFrame([position_data])
+            
+            if os.path.exists(position_file):
+                df.to_csv(position_file, mode='a', header=False, index=False)
+            else:
+                df.to_csv(position_file, index=False)
+                
+        except Exception as e:
+            self.error(f"记录持仓数据时发生错误: {str(e)}")
+            
+    def get_latest_trades(self, limit: int = 100) -> pd.DataFrame:
+        """获取最新交易记录"""
+        try:
+            trade_file = 'data/trade_data/trades.csv'
+            if not os.path.exists(trade_file):
+                return pd.DataFrame()
+            return pd.read_csv(trade_file).tail(limit)
+        except Exception as e:
+            self.error(f"获取交易记录时发生错误: {str(e)}")
+            return pd.DataFrame()
+            
+    def get_price_history(self, symbol: str, interval: str = "1m", limit: int = 1000) -> pd.DataFrame:
+        """获取价格历史数据"""
+        try:
+            price_file = f'data/price_data/{symbol.replace("/", "_")}_{interval}.csv'
+            if not os.path.exists(price_file):
+                return pd.DataFrame()
+            return pd.read_csv(price_file).tail(limit)
+        except Exception as e:
+            self.error(f"获取价格历史数据时发生错误: {str(e)}")
+            return pd.DataFrame()
 
     def log_market_data(self, exchange: str, symbol: str, bid: float, ask: float):
         """记录市场数据"""

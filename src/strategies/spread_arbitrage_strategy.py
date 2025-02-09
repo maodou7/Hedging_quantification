@@ -1,55 +1,83 @@
 """
 价差套利策略
 
-实现交易所间的价差套利逻辑
+实现交易所间的价差套利逻辑，集成机器学习预测
 """
 
 from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 from src.strategies.base_strategy import BaseStrategy
-from src.core.price_predictor import PricePredictor
+from src.ml.model_trainer import RealTimeModelTrainer
 from src.risk_management.slippage_calculator import SlippageCalculator
 from src.risk_management.risk_manager import RiskManager
 from src.utils.logger import ArbitrageLogger
 from src.core.data_store import DataStore
 from src.core.order_manager import OrderManager, Order
 from src.core.strategy_monitor import StrategyMonitor
-from src.Config.exchange_config import STRATEGY_CONFIG
+from src.config.trading import STRATEGY_CONFIG
+from src.config.exchange import FEATURE_FLAGS
 
 class SpreadArbitrageStrategy(BaseStrategy):
     def __init__(self, exchange_instance, config: Dict[str, Any] = None):
         super().__init__()
         self.exchange_instance = exchange_instance
         self.config = config or STRATEGY_CONFIG['spread_arbitrage']
+        self.feature_flags = FEATURE_FLAGS
         
         # 初始化组件
-        self.price_predictor = PricePredictor()
-        self.slippage_calculator = SlippageCalculator()
-        self.risk_manager = RiskManager()
         self.logger = ArbitrageLogger()
         self.data_store = DataStore()
-        self.order_manager = OrderManager()
-        self.strategy_monitor = StrategyMonitor()
         
-        # 策略参数
-        self.min_profit_threshold = self.config['min_profit_threshold']
-        self.trade_amount = self.config['trade_amount']
-        self.max_open_orders = self.config['max_open_orders']
-        self.price_decimal = self.config['price_decimal']
-        self.amount_decimal = self.config['amount_decimal']
+        # 根据功能开关初始化组件
+        if self.feature_flags['machine_learning']['enabled']:
+            self.model_trainer = RealTimeModelTrainer(
+                update_interval=self.feature_flags['machine_learning']['update_interval']
+            )
+            self.prediction_threshold = self.feature_flags['machine_learning']['prediction_threshold']
+        
+        if self.feature_flags['trading']['enabled']:
+            self.slippage_calculator = SlippageCalculator()
+            self.risk_manager = RiskManager()
+            self.order_manager = OrderManager()
+            self.strategy_monitor = StrategyMonitor()
+            
+            # 策略参数
+            self.min_profit_threshold = self.feature_flags['trading']['min_profit_threshold']
+            self.trade_amount = self.config['trade_amount']
+            self.max_open_orders = self.feature_flags['trading']['max_open_orders']
+            self.price_decimal = self.config['price_decimal']
+            self.amount_decimal = self.config['amount_decimal']
 
     async def start(self):
         """启动策略"""
         self.is_running = True
+        
+        # 根据功能开关启动相应组件
+        if self.feature_flags['machine_learning']['enabled']:
+            self.model_trainer.start()
+            self.logger.info("机器学习模型训练器已启动")
+            
+        if self.feature_flags['monitoring']['enabled']:
+            self.logger.info("市场监控已启动")
+            
+        if self.feature_flags['trading']['enabled']:
+            self.logger.info("交易功能已启动")
+            
         self.logger.info("价差套利策略已启动")
 
     async def stop(self):
         """停止策略"""
         self.is_running = False
-        # 取消所有未完成的订单
-        active_orders = self.order_manager.get_active_orders()
-        for order in active_orders:
-            await self.order_manager.cancel_order(self.exchange_instance, order.order_id)
+        
+        if self.feature_flags['machine_learning']['enabled']:
+            self.model_trainer.stop()
+            
+        if self.feature_flags['trading']['enabled']:
+            # 取消所有未完成的订单
+            active_orders = self.order_manager.get_active_orders()
+            for order in active_orders:
+                await self.order_manager.cancel_order(self.exchange_instance, order.order_id)
+                
         self.logger.info("价差套利策略已停止")
 
     async def process_price_update(self, exchange_id: str, symbol: str, price_data: Dict[str, Any]):
@@ -59,31 +87,43 @@ class SpreadArbitrageStrategy(BaseStrategy):
 
         try:
             # 1. 存储价格数据
-            self.data_store.update_price(exchange_id, symbol, price_data)
+            if self.feature_flags['monitoring']['enabled']:
+                self.data_store.update_price(exchange_id, symbol, price_data)
+            
+            # 2. 机器学习相关处理
+            price_prediction = None
+            if self.feature_flags['machine_learning']['enabled']:
+                # 更新模型训练数据
+                self.model_trainer.add_price_data(exchange_id, symbol, price_data)
+                
+                # 检查是否有足够的数据点进行预测
+                if len(self.data_store.get_price_history(exchange_id, symbol)) >= self.feature_flags['machine_learning']['min_data_points']:
+                    price_prediction = self.model_trainer.get_prediction(exchange_id, symbol)
 
-            # 2. 预测价格走势
-            prediction = self.price_predictor.predict(exchange_id, symbol, price_data)
+            # 3. 交易相关处理
+            if self.feature_flags['trading']['enabled']:
+                # 计算预期滑点
+                slippage = self.slippage_calculator.calculate(exchange_id, symbol, price_data)
 
-            # 3. 计算预期滑点
-            slippage = self.slippage_calculator.calculate(exchange_id, symbol, price_data)
+                # 风险评估
+                if not self.risk_manager.check_risk(exchange_id, symbol, price_data, slippage):
+                    return
 
-            # 4. 风险评估
-            if not self.risk_manager.check_risk(exchange_id, symbol, price_data, slippage):
-                return
+                # 检查是否有太多未完成订单
+                if len(self.order_manager.get_active_orders()) >= self.max_open_orders:
+                    return
 
-            # 5. 检查是否有太多未完成订单
-            if len(self.order_manager.get_active_orders()) >= self.max_open_orders:
-                return
-
-            # 6. 寻找套利机会
-            opportunity = self.calculate_opportunity(exchange_id, symbol, price_data)
-            if opportunity:
-                await self.execute_trade(opportunity)
+                # 寻找套利机会
+                opportunity = self.calculate_opportunity(exchange_id, symbol, price_data, price_prediction)
+                if opportunity:
+                    await self.execute_trade(opportunity)
 
         except Exception as e:
             self.logger.error(f"处理价格更新时发生错误: {str(e)}")
 
-    def calculate_opportunity(self, exchange_id: str, symbol: str, price_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def calculate_opportunity(self, exchange_id: str, symbol: str, 
+                            price_data: Dict[str, Any], 
+                            price_prediction: Optional[float]) -> Optional[Dict[str, Any]]:
         """计算套利机会"""
         try:
             # 获取所有交易所的价格数据
@@ -102,6 +142,19 @@ class SpreadArbitrageStrategy(BaseStrategy):
             # 计算价差
             spread = best_bid['price'] - best_ask['price']
             
+            # 如果有价格预测，考虑预测因素
+            if price_prediction is not None:
+                current_price = float(price_data['price'])
+                predicted_change = (price_prediction - current_price) / current_price
+                
+                # 根据预测调整交易方向
+                if predicted_change > self.prediction_threshold:
+                    # 预测价格上涨，增加买入意愿
+                    spread *= (1 + predicted_change)
+                elif predicted_change < -self.prediction_threshold:
+                    # 预测价格下跌，减少买入意愿
+                    spread *= (1 + predicted_change)
+            
             # 如果价差超过最小利润阈值
             if spread > self.min_profit_threshold:
                 return {
@@ -113,7 +166,8 @@ class SpreadArbitrageStrategy(BaseStrategy):
                     'sell_price': best_bid['price'],
                     'spread': spread,
                     'timestamp': price_data.get('timestamp'),
-                    'trade_amount': self.trade_amount
+                    'trade_amount': self.trade_amount,
+                    'prediction': price_prediction
                 }
             
             return None

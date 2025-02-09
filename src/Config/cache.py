@@ -1,3 +1,6 @@
+"""
+缓存配置模块
+"""
 from enum import Enum
 
 class CacheStrategy(Enum):
@@ -10,9 +13,12 @@ CACHE_CONFIG = {
     "redis": {
         "host": "localhost",
         "port": 6379,
-        "password": None,
+        "password": None,  # 从环境变量获取
         "db": 0,
-        "key_prefix": "hedging_"
+        "key_prefix": "hedging_",
+        "decode_responses": True,
+        "socket_timeout": 5,
+        "socket_connect_timeout": 5
     },
     "local": {
         "output_dir": "cache",

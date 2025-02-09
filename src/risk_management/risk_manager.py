@@ -1,19 +1,16 @@
 """
-风险管理模块
-
-负责：
-1. 交易前风险评估
-2. 持仓风险控制
-3. 资金风险控制
-4. 市场风险监控
+风险管理器模块
+负责管理交易风险
 """
 
+import logging
 from typing import Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from collections import deque
-import logging
-from src.Config.exchange_config import RISK_CONFIG
+from src.config.risk import RISK_CONFIG  # 修改导入路径
 from src.utils.logger import ArbitrageLogger
+
+logger = logging.getLogger(__name__)
 
 class RiskManager:
     """风险管理器"""
