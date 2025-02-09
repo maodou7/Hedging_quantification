@@ -1,5 +1,263 @@
 # API 参考文档
 
+## 核心模块 API
+
+### ModelTrainer
+
+模型训练器类，负责模型的训练、评估和预测。
+
+```python
+class ModelTrainer:
+    def train_model(self, X: np.ndarray, y: np.ndarray, model_type: str = 'lstm',
+                   **kwargs) -> Tuple[str, Dict, Dict]:
+        """
+        训练模型并返回模型ID和训练指标。
+
+        参数:
+            X (np.ndarray): 输入特征数据，shape=(n_samples, seq_len, n_features)
+            y (np.ndarray): 目标变量，shape=(n_samples,)
+            model_type (str): 模型类型，可选 'lstm' 或 'xgboost'
+            **kwargs: 其他模型参数
+
+        返回:
+            Tuple[str, Dict, Dict]: (模型ID, 评估指标, 训练历史)
+        """
+        pass
+
+    def predict(self, model_id: str, X: np.ndarray) -> np.ndarray:
+        """
+        使用指定模型进行预测。
+
+        参数:
+            model_id (str): 模型ID
+            X (np.ndarray): 输入特征数据
+
+        返回:
+            np.ndarray: 预测结果
+        """
+        pass
+```
+
+### PriceMonitor
+
+价格监控器，负责实时市场数据的获取和处理。
+
+```python
+class PriceMonitor:
+    def start_monitoring(self, symbols: List[str], callback: Callable):
+        """
+        开始监控指定交易对的价格。
+
+        参数:
+            symbols (List[str]): 交易对列表
+            callback (Callable): 价格更新回调函数
+        """
+        pass
+
+    def get_latest_price(self, symbol: str) -> Dict:
+        """
+        获取最新价格数据。
+
+        参数:
+            symbol (str): 交易对
+
+        返回:
+            Dict: 价格信息字典
+        """
+        pass
+```
+
+### ExchangeFactory
+
+交易所工厂类，负责创建和管理交易所连接。
+
+```python
+class ExchangeFactory:
+    def create_exchange(self, exchange_name: str, config: Dict) -> Exchange:
+        """
+        创建交易所实例。
+
+        参数:
+            exchange_name (str): 交易所名称
+            config (Dict): 配置信息
+
+        返回:
+            Exchange: 交易所实例
+        """
+        pass
+```
+
+## 数据处理 API
+
+### FeatureEngineering
+
+特征工程类，负责数据预处理和特征提取。
+
+```python
+class FeatureEngineering:
+    def process_raw_data(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        处理原始数据并生成特征。
+
+        参数:
+            data (pd.DataFrame): 原始数据
+
+        返回:
+            pd.DataFrame: 处理后的特征数据
+        """
+        pass
+
+    def extract_features(self, data: pd.DataFrame, feature_config: Dict) -> pd.DataFrame:
+        """
+        根据配置提取特征。
+
+        参数:
+            data (pd.DataFrame): 输入数据
+            feature_config (Dict): 特征配置
+
+        返回:
+            pd.DataFrame: 提取的特征
+        """
+        pass
+```
+
+## 策略模块 API
+
+### TradingStrategy
+
+交易策略基类，定义了策略接口。
+
+```python
+class TradingStrategy:
+    def generate_signals(self, market_data: pd.DataFrame) -> pd.Series:
+        """
+        生成交易信号。
+
+        参数:
+            market_data (pd.DataFrame): 市场数据
+
+        返回:
+            pd.Series: 交易信号
+        """
+        pass
+
+    def calculate_position_size(self, signal: float,
+                              account_info: Dict) -> float:
+        """
+        计算仓位大小。
+
+        参数:
+            signal (float): 交易信号
+            account_info (Dict): 账户信息
+
+        返回:
+            float: 仓位大小
+        """
+        pass
+```
+
+## 风险管理 API
+
+### RiskManager
+
+风险管理器，负责风险控制和仓位管理。
+
+```python
+class RiskManager:
+    def check_risk_limits(self, order: Dict) -> bool:
+        """
+        检查订单是否符合风险限制。
+
+        参数:
+            order (Dict): 订单信息
+
+        返回:
+            bool: 是否通过风险检查
+        """
+        pass
+
+    def calculate_stop_loss(self, position: Dict) -> float:
+        """
+        计算止损价格。
+
+        参数:
+            position (Dict): 持仓信息
+
+        返回:
+            float: 止损价格
+        """
+        pass
+```
+
+## 使用示例
+
+### 模型训练和预测
+
+```python
+from src.ml.model_trainer import ModelTrainer
+import numpy as np
+
+# 初始化训练器
+trainer = ModelTrainer()
+
+# 准备数据
+X = np.random.randn(1000, 10, 33)  # (样本数, 序列长度, 特征数)
+y = np.random.randn(1000)  # 目标变量
+
+# 训练模型
+model_id, metrics, history = trainer.train_model(
+    X, y,
+    model_type='lstm',
+    learning_rate=0.001,
+    batch_size=32,
+    epochs=100
+)
+
+# 预测
+predictions = trainer.predict(model_id, X[:5])
+```
+
+### 实时价格监控
+
+```python
+from src.exchange.price_monitor import PriceMonitor
+
+def price_callback(price_data):
+    print(f"New price: {price_data}")
+
+# 初始化监控器
+monitor = PriceMonitor()
+
+# 开始监控
+monitor.start_monitoring(
+    symbols=['BTC/USDT', 'ETH/USDT'],
+    callback=price_callback
+)
+```
+
+### 特征工程
+
+```python
+from src.ml.feature_engineering import FeatureEngineering
+import pandas as pd
+
+# 初始化特征工程器
+fe = FeatureEngineering()
+
+# 准备数据
+data = pd.DataFrame(...)
+
+# 配置特征
+feature_config = {
+    'technical_indicators': ['RSI', 'MACD', 'BB'],
+    'time_features': ['hour', 'day_of_week'],
+    'market_features': ['volume', 'trades']
+}
+
+# 提取特征
+features = fe.extract_features(data, feature_config)
+```
+
 ## ModelTrainer 类
 
 ### 初始化
