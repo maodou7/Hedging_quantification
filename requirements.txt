@@ -1,0 +1,106 @@
+# 核心依赖
+python-dotenv>=0.19.0
+ccxt>=4.0.0
+numpy>=1.21.0
+pandas>=1.3.0
+tensorflow>=2.10.0
+scikit-learn>=1.0.0
+
+# Web框架
+fastapi>=0.68.0
+uvicorn>=0.15.0
+
+# 数据库
+psycopg2-binary>=2.9.1
+influxdb-client>=1.24.0
+redis>=4.0.0
+
+# 工具库
+aiohttp>=3.8.0
+python-telegram-bot>=13.7
+requests>=2.26.0
+pydantic>=1.8.2
+loguru>=0.5.3
+PyYAML>=5.4.1
+
+# 监控和性能
+prometheus-client>=0.11.0
+psutil>=5.8.0
+
+# 测试
+pytest>=6.2.5
+pytest-asyncio>=0.15.1
+
+aiodns==3.2.0
+aiohappyeyeballs==2.4.4
+aiomysql==0.2.0
+aiosignal==1.3.2
+aiosqlite==0.20.0
+annotated-types==0.7.0
+anyio==4.8.0
+async-timeout==5.0.1
+attrs==25.1.0
+black==25.1.0
+cachetools==5.5.1
+ccxtpro==1.0.1
+certifi==2025.1.31
+cffi==1.17.1
+charset-normalizer==3.4.1
+click==8.1.8
+colorama==0.4.6
+coverage==7.6.11
+-e git+https://github.com/maodou7/Hedging_quantification.git@0560433f7bbb0b16629b6ffb1dc94c12a0c460c0#egg=crypto_arbitrage
+cryptography==44.0.0
+filelock==3.17.0
+flatbuffers==25.1.24
+frozenlist==1.5.0
+fsspec==2025.2.0
+h11==0.14.0
+idna==3.10
+iniconfig==2.0.0
+iso8601==2.1.0
+Jinja2==3.1.5
+joblib==1.4.2
+libclang==18.1.1
+MarkupSafe==3.0.2
+mpmath==1.3.0
+multidict==6.1.0
+mypy-extensions==1.0.0
+namex==0.0.8
+networkx==3.4.2
+packaging==24.2
+pathspec==0.12.1
+patsy==1.0.1
+platformdirs==4.3.6
+pluggy==1.5.0
+propcache==0.2.1
+pycares==4.5.0
+pycparser==2.22
+pydantic_core==2.27.1
+PyMySQL==1.1.1
+pypika-tortoise==0.3.0
+python-dateutil @ file:///home/conda/feedstock_root/build_artifacts/python-dateutil_1733215673016/work
+pytz==2024.2
+redis-cli==1.0.1
+scipy==1.15.1
+setuptools==75.8.0
+six @ file:///home/conda/feedstock_root/build_artifacts/six_1733380938961/work
+sniffio==1.3.1
+starlette==0.41.3
+statsmodels==0.14.4
+sympy==1.13.1
+tensorboard-data-server==0.7.2
+termcolor==2.5.0
+threadpoolctl==3.5.0
+torch==2.6.0
+tortoise-orm==0.22.1
+typing_extensions==4.12.2
+tzdata @ file:///home/conda/feedstock_root/build_artifacts/python-tzdata_1737541069190/work
+urllib3==2.3.0
+uvloop==0.19.0
+wheel==0.45.1
+wrapt==1.17.2
+xgboost==2.1.4
+yarl==1.18.3
+PyQt6==6.8.1
+pyqtgraph==0.13.3

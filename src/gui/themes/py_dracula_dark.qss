@@ -1,0 +1,246 @@
+/* /////////////////////////////////////////////////////////////////////////////////////////////////
+主题样式表 - 暗色主题
+///////////////////////////////////////////////////////////////////////////////////////////////// */
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////
+全局样式
+///////////////////////////////////////////////////////////////////////////////////////////////// */
+QWidget {
+    color: rgb(221, 221, 221);
+    font: 10pt "Segoe UI";
+}
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////
+主窗口
+///////////////////////////////////////////////////////////////////////////////////////////////// */
+#centralwidget {
+    background-color: rgb(40, 44, 52);
+    padding: 0px;
+    margin: 0px;
+}
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////
+标题栏
+///////////////////////////////////////////////////////////////////////////////////////////////// */
+#titleBar {
+    background-color: rgb(33, 37, 43);
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+}
+
+#titleLabel {
+    color: rgb(221, 221, 221);
+    font: 12pt "Segoe UI";
+    padding-left: 5px;
+}
+
+#settingsButton {
+    background-color: rgb(33, 37, 43);
+    border: none;
+    border-radius: 5px;
+    padding: 5px;
+    font-size: 16px;
+    font-family: "Segoe UI";
+}
+
+#settingsButton:hover {
+    background-color: rgb(52, 59, 72);
+}
+
+#minButton {
+    background-color: rgb(33, 37, 43);
+    border: none;
+    border-radius: 5px;
+    padding: 5px;
+    font-size: 16px;
+    font-family: "Segoe UI";
+}
+
+#minButton:hover {
+    background-color: rgb(52, 59, 72);
+}
+
+#maxButton {
+    background-color: rgb(33, 37, 43);
+    border: none;
+    border-radius: 5px;
+    padding: 5px;
+    font-size: 16px;
+    font-family: "Segoe UI";
+}
+
+#maxButton:hover {
+    background-color: rgb(52, 59, 72);
+}
+
+#closeButton {
+    background-color: rgb(33, 37, 43);
+    border: none;
+    border-radius: 5px;
+    padding: 5px;
+    font-size: 16px;
+    font-family: "Segoe UI";
+}
+
+#closeButton:hover {
+    background-color: rgb(189, 47, 47);
+}
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////
+标签页
+///////////////////////////////////////////////////////////////////////////////////////////////// */
+QTabWidget {
+    background-color: transparent;
+}
+
+QTabWidget::pane {
+    border: none;
+    background-color: rgb(33, 37, 43);
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+}
+
+QTabBar::tab {
+    background-color: rgb(33, 37, 43);
+    color: rgb(221, 221, 221);
+    padding: 8px 20px;
+    border: none;
+}
+
+QTabBar::tab:selected {
+    background-color: rgb(40, 44, 52);
+    border-bottom: 2px solid rgb(0, 122, 204);
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: rgb(40, 44, 52);
+}
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////
+下拉框
+///////////////////////////////////////////////////////////////////////////////////////////////// */
+QComboBox {
+    background-color: rgb(33, 37, 43);
+    border: 1px solid rgb(44, 49, 58);
+    border-radius: 5px;
+    padding: 5px;
+    min-width: 100px;
+}
+
+QComboBox:hover {
+    border: 1px solid rgb(64, 71, 88);
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QComboBox::down-arrow {
+    image: url(src/gui/themes/icons/arrow-down.png);
+    width: 12px;
+    height: 12px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: rgb(33, 37, 43);
+    border: 1px solid rgb(44, 49, 58);
+    border-radius: 5px;
+    selection-background-color: rgb(52, 59, 72);
+}
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////
+表格
+///////////////////////////////////////////////////////////////////////////////////////////////// */
+QTableWidget {
+    background-color: rgb(33, 37, 43);
+    border: 1px solid rgb(44, 49, 58);
+    gridline-color: rgb(44, 49, 58);
+}
+
+QTableWidget::item {
+    border-color: rgb(44, 49, 58);
+    padding-left: 5px;
+    padding-right: 5px;
+    gridline-color: rgb(44, 49, 58);
+}
+
+QTableWidget::item:selected {
+    background-color: rgb(0, 122, 204);
+}
+
+QHeaderView::section {
+    background-color: rgb(33, 37, 43);
+    color: rgb(221, 221, 221);
+    border: 1px solid rgb(44, 49, 58);
+    padding: 5px;
+}
+
+QTableWidget::item:hover {
+    background-color: rgb(52, 59, 72);
+}
+
+/* 添加工具提示样式 */
+QToolTip {
+    background-color: rgb(33, 37, 43);
+    color: rgb(221, 221, 221);
+    border: 1px solid rgb(44, 49, 58);
+    padding: 5px;
+}
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////
+按钮
+///////////////////////////////////////////////////////////////////////////////////////////////// */
+QPushButton {
+    background-color: rgb(52, 59, 72);
+    border: 2px solid rgb(52, 59, 72);
+    border-radius: 5px;	
+    color: rgb(221, 221, 221);
+    padding: 5px;
+}
+
+QPushButton:hover {
+    background-color: rgb(57, 65, 80);
+    border: 2px solid rgb(61, 70, 86);
+}
+
+QPushButton:pressed {	
+    background-color: rgb(35, 40, 49);
+    border: 2px solid rgb(43, 50, 61);
+}
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////
+标签
+///////////////////////////////////////////////////////////////////////////////////////////////// */
+QLabel {
+    color: rgb(221, 221, 221);
+    background-color: transparent;
+}
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////
+图表
+///////////////////////////////////////////////////////////////////////////////////////////////// */
+PlotWidget {
+    background-color: rgb(33, 37, 43);
+    border: 1px solid rgb(44, 49, 58);
+}
+
+/* /////////////////////////////////////////////////////////////////////////////////////////////////
+设置对话框
+///////////////////////////////////////////////////////////////////////////////////////////////// */
+QDialog {
+    background-color: rgb(40, 44, 52);
+    border-radius: 10px;
+}
+
+QLineEdit {
+    background-color: rgb(33, 37, 43);
+    border: 1px solid rgb(44, 49, 58);
+    border-radius: 5px;
+    padding: 5px;
+    color: rgb(221, 221, 221);
+}
+
+QLineEdit:focus {
+    border: 1px solid rgb(0, 122, 204);
+} 
