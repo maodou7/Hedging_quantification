@@ -16,7 +16,7 @@ REDIS_CONFIG = {
 }
 
 # 缓存模式
-CACHE_MODE = 1  # 1: Redis缓存, 2: 本地文件缓存, 3: 不使用缓存
+CACHE_MODE = 3  # 1: Redis缓存, 2: 本地文件缓存, 3: 不使用缓存（消息队列）
 
 # 市场结构配置
 MARKET_STRUCTURE_CONFIG = {

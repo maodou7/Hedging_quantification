@@ -12,7 +12,9 @@ setup(
         "aiohttp>=3.9.0",
         "python-dateutil>=2.8.2",
         "pytz>=2024.1",
-        "requests>=2.31.0"
+        "requests>=2.31.0",
+        "qtawesome>=1.3.0",
+        "PyQt6>=6.4.0"
     ],
     author="Your Name",
     author_email="your.email@example.com",
