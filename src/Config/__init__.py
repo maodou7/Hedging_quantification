@@ -40,7 +40,8 @@ console_formatter = logging.Formatter(LOGGING_CONFIG["formatters"]["default"]["f
 console_handler.setFormatter(console_formatter)
 
 # 创建文件处理器
-file_handler = logging.FileHandler(f"{LOGGING_CONFIG['log_dir']}/{LOGGING_CONFIG['log_file']}")
+# 使用默认的info日志文件路径
+file_handler = logging.FileHandler(f"{LOGGING_CONFIG['log_dir']}/{LOGGING_CONFIG['log_files']['info']}")
 file_handler.setLevel(LOGGING_CONFIG["log_level"])
 file_formatter = logging.Formatter(LOGGING_CONFIG["formatters"]["detailed"]["format"],
                                 LOGGING_CONFIG["formatters"]["detailed"]["datefmt"])
@@ -79,6 +80,11 @@ __all__ = [
 def init_config():
     """初始化配置系统"""
     try:
+        # 验证配置前确保交易所配置正确
+        from .exchange import EXCHANGE_CONFIGS
+        if not isinstance(EXCHANGE_CONFIGS, dict) or any(not isinstance(v, dict) for v in EXCHANGE_CONFIGS.values()):
+            raise ConfigError("交易所配置格式错误，必须为字典类型")
+
         # 验证配置
         validation_result = validate_all_configs()
         if not validation_result.is_valid:
@@ -118,4 +124,4 @@ def reload_config():
         return False
 
 # 在导入时初始化配置系统
-init_config() 
+init_config()

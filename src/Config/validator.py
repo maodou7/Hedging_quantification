@@ -162,11 +162,11 @@ class ConfigValidator:
             result.add_error("交易所列表不能为空")
         
         # 验证交易对配置
-        symbols = config.get("SYMBOLS", {})
-        for market_type, symbol_list in symbols.items():
-            if not isinstance(symbol_list, list):
-                result.add_error(f"{market_type}的交易对列表必须是数组")
-            for symbol in symbol_list:
+        symbols = config.get("SYMBOLS", [])
+        if not isinstance(symbols, list):
+            result.add_error("交易对列表必须是数组")
+        else:
+            for symbol in symbols:
                 if not re.match(r'^[A-Z0-9]+/[A-Z0-9]+(?::[A-Z0-9]+)?$', symbol):
                     result.add_error(f"无效的交易对格式: {symbol}")
         
@@ -176,12 +176,14 @@ class ConfigValidator:
             result.add_error("至少需要启用一种市场类型")
         
         # 验证交易所配置
-        for exchange_id, exchange_config in config.get("EXCHANGE_CONFIGS", {}).items():
-            if not is_dev:
-                if not exchange_config.get("apiKey"):
-                    result.add_warning(f"{exchange_id}未配置API密钥")
-                if exchange_config.get("test", False):
-                    result.add_warning(f"{exchange_id}正在使用测试模式")
+        exchange_configs = config.get("EXCHANGE_CONFIGS", {})
+        if isinstance(exchange_configs, dict):
+            for exchange_id, exchange_config in exchange_configs.items():
+                if not is_dev:
+                    if not exchange_config.get("apiKey"):
+                        result.add_warning(f"{exchange_id}未配置API密钥")
+                    if exchange_config.get("test", False):
+                        result.add_warning(f"{exchange_id}正在使用测试模式")
         
         return result
     

@@ -41,6 +41,7 @@
 from typing import Dict, List, Set
 
 from .exchange_instance import ExchangeInstance
+from src.config.exchange import MARKET_TYPES
 
 
 class MarketProcessor:
@@ -92,8 +93,7 @@ class MarketProcessor:
         """
         return [mtype for mtype, enabled in market_types.items() if enabled]
 
-    def process_markets(self, markets: dict, config: dict, market_types: Dict[str, bool]) -> Dict[
-        str, Dict[str, Set[str]]]:
+    def process_markets(self, markets: dict, config: dict, market_types: Dict[str, bool]) -> Dict[str, Dict[str, Set[str]]]:
         """
         处理市场数据
         
@@ -124,16 +124,21 @@ class MarketProcessor:
             result = processor.process_markets(markets, Config, market_types)
         """
         market_sets = self._get_empty_market_sets(market_types, config)
-        for symbol, market in markets.items():
-            try:
-                self._process_single_market(symbol, market, market_sets, config)
-            except Exception as e:
-                print(f"处理市场 {symbol} 时发生错误: {str(e)}")
-                continue
+        
+        # 处理每个市场类型的数据
+        for market_type in self.get_enabled_market_types(market_types):
+            type_markets = markets.get(market_type, {})
+            for symbol, market in type_markets.items():
+                try:
+                    self._process_single_market(symbol, market, market_sets, config, market_type)
+                except Exception as e:
+                    print(f"处理市场 {symbol} 时发生错误: {str(e)}")
+                    continue
         return market_sets
 
     def _process_single_market(self, symbol: str, market: dict,
-                               market_sets: Dict[str, Dict[str, Set[str]]], config: dict):
+                             market_sets: Dict[str, Dict[str, Set[str]]], 
+                             config: dict, market_type: str):
         """
         处理单个市场数据
         
@@ -144,20 +149,20 @@ class MarketProcessor:
             market (dict): 市场信息字典
             market_sets (Dict[str, Dict[str, Set[str]]]): 市场集合
             config (dict): 配置信息
+            market_type (str): 市场类型
             
         注意：
             - 如果计价货币不在配置中，该市场将被忽略
             - 如果市场类型不匹配，该市场将被忽略
         """
-        quote = market['quote']
+        quote = market.get('quote')
         if quote not in config['quote_currencies']:
             return
 
-        market_type = market.get('type', '')
-        for enabled_type in self.get_enabled_market_types(config['type_configs']):
-            type_config = config['type_configs'][enabled_type]
-            if market_type == type_config['type']:
-                market_sets[enabled_type][quote].add(symbol)
+        # 检查市场类型是否启用
+        if market_type in MARKET_TYPES and MARKET_TYPES[market_type]:
+            if market_type in market_sets and quote in market_sets[market_type]:
+                market_sets[market_type][quote].add(symbol)
 
     def _get_empty_market_sets(self, market_types: Dict[str, bool], config: dict) -> Dict[str, Dict[str, Set[str]]]:
         """

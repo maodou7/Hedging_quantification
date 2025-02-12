@@ -20,36 +20,52 @@ wheels/
 .installed.cfg
 *.egg
 
-# 环境文件
-.env
-.venv
-env/
-venv/
-ENV/
-
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+.project
+.pydevproject
+.settings/
+
+# 虚拟环境
+venv/
+env/
+ENV/
 
 # 日志和缓存
 logs/
 *.log
+*.log.*
+cache/
 .cache/
+checkpoints/
+market_structures/
+backups/
+
+# 测试
 .pytest_cache/
+.coverage
+htmlcov/
+tests/__pycache__/
+test_*.py
+!tests/test_*.py
 
 # 数据文件
 data/
-*.csv
-*.json
-*.pkl
-
-# 模型文件
 models/
-*.pth
+*.pkl
 *.h5
-*.model
+*.pt
+*.pth
+*.ckpt
+*.bin
+
+# 环境配置
+.env
+.env.*
+!.env.example
 
 # 系统文件
 .DS_Store

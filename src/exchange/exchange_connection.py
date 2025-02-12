@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Dict, Any, Optional
 
-from src.config.exchange import EXCHANGE_CONFIGS  # 修改为正确的导入路径
+from src.config.exchange import EXCHANGE_CONFIGS, QUOTE_CURRENCIES  # 添加QUOTE_CURRENCIES导入
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +19,7 @@ class ExchangeConnection:
         self.exchange: Optional[ccxt.Exchange] = None
         self.initialized = False
         self.last_error: Optional[Exception] = None
+        self._session = None
         
     async def initialize(self) -> bool:
         """初始化交易所连接"""
@@ -27,8 +28,14 @@ class ExchangeConnection:
             exchange_class = getattr(ccxt, self.exchange_id)
             self.exchange = exchange_class(self.config)
             
+            # 设置请求超时
+            self.exchange.timeout = 30000  # 30秒超时
+            
             # 加载市场
             await self.exchange.load_markets()
+            
+            # 初始化session
+            self._session = self.exchange.session
             
             self.initialized = True
             logger.info(f"交易所 {self.exchange_id} 连接初始化成功")
@@ -43,6 +50,8 @@ class ExchangeConnection:
         """关闭交易所连接"""
         if self.exchange:
             try:
+                if self._session:
+                    await self._session.close()
                 await self.exchange.close()
                 logger.info(f"交易所 {self.exchange_id} 连接已关闭")
             except Exception as e:
@@ -50,6 +59,7 @@ class ExchangeConnection:
         
         self.initialized = False
         self.exchange = None
+        self._session = None
     
     def check_connection(self) -> bool:
         """

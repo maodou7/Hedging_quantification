@@ -137,11 +137,18 @@ FEATURE_FLAGS = {
 # 交易所列表
 EXCHANGES = ["binance", "bybit", "okx", "huobi", "gateio"]
 
+# 定义要监控的交易对
+DEFAULT_SYMBOLS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT']
+SYMBOLS = DEFAULT_SYMBOLS  # 直接使用默认交易对列表
+
+# 报价货币
+QUOTE_CURRENCIES = ["USDT"]
+
 # 市场类型
 MARKET_TYPES = {
     "spot": True,      # 现货市场
     "futures": False,  # 期货市场
-    "swap": True      # 永续合约市场
+    "swap": False      # 永续合约市场
 }
 
 # Redis配置
@@ -153,8 +160,75 @@ REDIS_CONFIG = {
     "decode_responses": True
 }
 
-# 缓存模式
-CACHE_MODE = os.getenv("CACHE_MODE", "selective")
+# 缓存策略配置
+CACHE_MODE = {
+    "active_strategy": os.getenv("CACHE_STRATEGY", "redis"),  # 可选: redis, memory, none
+    
+    # Redis缓存策略配置
+    "redis": {
+        "enabled": True,
+        "update_interval": 60,  # 缓存更新间隔(秒)
+        "cleanup_interval": 3600,  # 缓存清理间隔(秒)
+        "max_items": 10000,  # 最大缓存项数
+        "ttl": 3600,  # 默认过期时间(秒)
+        "compression": True,  # 是否启用数据压缩
+        "serializer": "pickle",  # 序列化方式：pickle, json, msgpack
+        "retry_options": {
+            "max_retries": 3,
+            "retry_delay": 1,  # 重试延迟(秒)
+            "timeout": 5  # 连接超时(秒)
+        }
+    },
+    
+    # 本地共享内存缓存策略配置
+    "memory": {
+        "enabled": True,
+        "backend": "shared_memory",  # windows下使用mmap，linux下使用shm
+        "max_size": 1024 * 1024 * 512,  # 最大内存使用(512MB)
+        "update_interval": 30,  # 更新间隔(秒)
+        "cleanup_interval": 1800,  # 清理间隔(秒)
+        "ttl": 1800,  # 默认过期时间(秒)
+        "max_items": 5000,  # 最大缓存条目数
+        "sync_interval": 5,  # 同步间隔(秒)
+        "compression": True,  # 是否启用数据压缩
+        "persistence": {
+            "enabled": True,  # 是否启用持久化
+            "interval": 300,  # 持久化间隔(秒)
+            "path": "data/cache"  # 持久化文件路径
+        }
+    },
+    
+    # 无缓存策略（消息队列）配置
+    "none": {
+        "enabled": True,
+        "queue_type": "memory",  # 队列类型：memory, redis
+        "max_queue_size": 10000,  # 最大队列大小
+        "batch_size": 100,  # 批处理大小
+        "flush_interval": 1,  # 刷新间隔(秒)
+        "retry_options": {
+            "max_retries": 3,
+            "retry_delay": 1
+        },
+        "monitoring": {
+            "enabled": True,
+            "metrics_interval": 60  # 指标收集间隔(秒)
+        }
+    },
+    
+    # 系统适配配置
+    "system_adapter": {
+        "windows": {
+            "shared_memory_impl": "mmap",
+            "lock_type": "file",
+            "ipc_method": "named_pipe"
+        },
+        "linux": {
+            "shared_memory_impl": "shm",
+            "lock_type": "posix",
+            "ipc_method": "unix_socket"
+        }
+    }
+}
 
 # 市场结构配置
 MARKET_STRUCTURE_CONFIG = {
@@ -168,13 +242,140 @@ MARKET_STRUCTURE_CONFIG = {
     }
 }
 
+# 动态获取共有交易对（异步）
+async def update_common_symbols():
+    """更新共有交易对列表"""
+    from src.core.cache_manager import cache
+    try:
+        global COMMON_SYMBOLS
+        new_symbols = await get_common_symbols_async()
+        if new_symbols:
+            COMMON_SYMBOLS = new_symbols
+            await cache.set("common_symbols", new_symbols, ex=3600)  # 缓存1小时
+    except Exception as e:
+        from src.utils.logger import ArbitrageLogger
+        ArbitrageLogger().error(f"更新交易对失败: {str(e)}")
+
+# 初始化时立即更新
+import asyncio
+try:
+    COMMON_SYMBOLS = asyncio.run(update_common_symbols()) or DEFAULT_SYMBOLS
+except:
+    COMMON_SYMBOLS = DEFAULT_SYMBOLS
+
+# 要监控的交易对
+SYMBOLS = COMMON_SYMBOLS
+
+# 各交易所支持的交易对（按交易所API规范）
+EXCHANGE_SYMBOLS = {
+    "binance": ["BTC/USDT", "ETH/USDT", "BNB/USDT"],  # 使用斜杠分隔
+    "bybit": ["BTC/USDT", "ETH/USDT", "BNB/USDT"],    # 同Binance格式
+    "okx": ["BTC-USDT", "ETH-USDT", "BNB-USDT"],       # 使用短横线分隔
+    "huobi": ["btcusdt", "ethusdt", "bnbusdt"],        # 全小写无分隔符
+    "gateio": ["BTC_USDT", "ETH_USDT", "BNB_USDT"]     # 使用下划线分隔
+}
+
+def validate_symbol_format(exchange_id: str, symbol: str) -> bool:
+    """根据交易所规范验证交易对格式"""
+    try:
+        # 获取交易所配置
+        exchange_config = get_exchange_config(exchange_id)
+        
+        # 如果没有API密钥，使用基础配置
+        if not exchange_config.get('apiKey'):
+            exchange_config = {
+                'enableRateLimit': True,
+                'timeout': 30000,
+                'options': {
+                    'defaultType': 'spot',
+                    'adjustForTimeDifference': True
+                }
+            }
+            
+        # 转换交易对格式
+        if exchange_id == 'huobi':
+            formatted_symbol = symbol.lower().replace('/', '').replace('-', '').replace('_', '')
+        elif exchange_id == 'okx':
+            formatted_symbol = symbol.replace('/', '-')
+        elif exchange_id == 'gateio':
+            formatted_symbol = symbol.replace('/', '_')
+        else:  # binance, bybit等使用标准格式
+            formatted_symbol = symbol
+            
+        # 创建交易所实例
+        exchange_class = getattr(ccxt, exchange_id)
+        instance = exchange_class(exchange_config)
+        
+        # 加载市场数据
+        instance.load_markets()
+        
+        # 验证交易对
+        market = instance.market(formatted_symbol)
+        return (market['active'] and 
+                market['quote'] in QUOTE_CURRENCIES and
+                market['spot'])  # 只验证现货交易对
+                
+    except (ccxt.BadSymbol, AttributeError, KeyError) as e:
+        from src.utils.logger import ArbitrageLogger
+        ArbitrageLogger().debug(f"交易对格式验证失败 {exchange_id}/{symbol}: {str(e)}")
+        return False
+    except Exception as e:
+        from src.utils.logger import ArbitrageLogger
+        ArbitrageLogger().warning(f"交易对格式验证异常 {exchange_id}/{symbol}: {str(e)}")
+        return False
+    finally:
+        if 'instance' in locals():
+            try:
+                instance.close()
+            except Exception:
+                pass
+
+# 默认手续费率
+DEFAULT_FEES = {
+    "maker": 0.001,  # 0.1%
+    "taker": 0.002   # 0.2%
+}
+
+# 指标配置
+INDICATOR_CONFIG = {
+    # 序列长度
+    "sequence_length": FEATURE_FLAGS["machine_learning"]["models"]["lstm"]["sequence_length"],
+    "prediction_length": 10,  # 预测未来10个时间点
+    
+    # 特征列表
+    "features": [
+        "close",    # 收盘价
+        "volume",   # 成交量
+        "rsi",      # RSI指标
+        "macd",     # MACD指标
+        "bid",      # 买一价
+        "ask",      # 卖一价
+        "spread"    # 买卖价差
+    ],
+    
+    # 模型参数
+    "model_params": {
+        "hidden_size": 50,
+        "num_layers": 2,
+        "dropout": 0.2,
+        "learning_rate": 0.001
+    },
+    
+    # 训练参数
+    "train_params": {
+        "batch_size": FEATURE_FLAGS["machine_learning"]["models"]["lstm"]["batch_size"],
+        "epochs": FEATURE_FLAGS["machine_learning"]["models"]["lstm"]["epochs"],
+        "validation_split": 0.2
+    }
+}
+
 def get_exchange_config(exchange_name: str) -> Dict:
     """获取交易所配置，从环境变量中读取敏感信息"""
     base_config = {
         'enableRateLimit': True,
         'timeout': 30000,
         'options': {
-            'defaultType': 'spot',  # 默认为现货，但支持切换到swap
+            'defaultType': 'spot',  # 默认为现货
             'adjustForTimeDifference': True,
             'recvWindow': 60000,
             'createMarketBuyOrderRequiresPrice': False,
@@ -260,99 +461,72 @@ def get_exchange_config(exchange_name: str) -> Dict:
     
     return exchange_config
 
-def get_common_symbols(exchanges: List[str]) -> List[str]:
-    """获取所有交易所共有的交易对"""
-    all_symbols: Dict[str, Set[str]] = {}
-    
-    for exchange_id in exchanges:
-        try:
-            # 创建交易所实例
-            exchange_class = getattr(ccxt, exchange_id)
-            exchange_config = get_exchange_config(exchange_id)
-            exchange = exchange_class(exchange_config)
-            
-            # 加载市场
-            exchange.load_markets()
-            
-            # 获取现货和永续合约的所有交易对
-            spot_symbols = set()
-            swap_symbols = set()
-            
-            for symbol, market in exchange.markets.items():
-                # 只考虑USDT计价的交易对
-                if not symbol.endswith('/USDT'):
-                    continue
-                    
-                if market.get('spot'):
-                    spot_symbols.add(symbol)
-                elif market.get('swap') or market.get('future'):
-                    # 有些交易所用future表示永续合约
-                    if market.get('contract') and market.get('linear'):
-                        swap_symbols.add(symbol)
-            
-            # 合并现货和永续的交易对
-            all_symbols[exchange_id] = spot_symbols.union(swap_symbols)
-            
-        except Exception as e:
-            print(f"获取{exchange_id}交易对时出错: {str(e)}")
-            all_symbols[exchange_id] = set()
-    
-    # 找出所有交易所的交易对交集
-    common_symbols = set.intersection(*all_symbols.values()) if all_symbols else set()
-    
-    # 转换为列表并排序
-    return sorted(list(common_symbols))
-
-# 报价货币
-QUOTE_CURRENCIES = ["USDT"]
-
-# 动态获取共有交易对
-COMMON_SYMBOLS = get_common_symbols(EXCHANGES)
-
-# 所有支持的交易对
-SYMBOLS = {
-    exchange_id: COMMON_SYMBOLS
-    for exchange_id in EXCHANGES
-}
-
-# 默认手续费率
-DEFAULT_FEES = {
-    "maker": 0.001,  # 0.1%
-    "taker": 0.002   # 0.2%
-}
-
-# 指标配置
-INDICATOR_CONFIG = {
-    # 序列长度
-    "sequence_length": FEATURE_FLAGS["machine_learning"]["models"]["lstm"]["sequence_length"],
-    "prediction_length": 10,  # 预测未来10个时间点
-    
-    # 特征列表
-    "features": [
-        "close",    # 收盘价
-        "volume",   # 成交量
-        "rsi",      # RSI指标
-        "macd",     # MACD指标
-        "bid",      # 买一价
-        "ask",      # 卖一价
-        "spread"    # 买卖价差
-    ],
-    
-    # 模型参数
-    "model_params": {
-        "hidden_size": 50,
-        "num_layers": 2,
-        "dropout": 0.2,
-        "learning_rate": 0.001
-    },
-    
-    # 训练参数
-    "train_params": {
-        "batch_size": FEATURE_FLAGS["machine_learning"]["models"]["lstm"]["batch_size"],
-        "epochs": FEATURE_FLAGS["machine_learning"]["models"]["lstm"]["epochs"],
-        "validation_split": 0.2
-    }
-}
-
 # 交易所完整配置（动态获取）
-EXCHANGE_CONFIGS = {name: get_exchange_config(name) for name in EXCHANGES} 
+EXCHANGE_CONFIGS = {name: get_exchange_config(name) for name in EXCHANGES}
+
+def initialize_common_symbols(symbols: List[str]):
+    """初始化共有交易对"""
+    global COMMON_SYMBOLS
+    COMMON_SYMBOLS = symbols
+
+async def get_common_symbols_async(max_retries: int = 3) -> List[str]:
+    """
+    异步获取所有交易所共同支持的交易对（带重试机制）
+    返回所有交易所都支持的交易对的交集
+    """
+    from src.utils.logger import ArbitrageLogger
+    logger = ArbitrageLogger()
+    
+    async def fetch_exchange_symbols(exchange_id: str) -> Set[str]:
+        """异步获取单个交易所的交易对"""
+        for attempt in range(max_retries):
+            try:
+                exchange_class = getattr(ccxt, exchange_id)
+                exchange = exchange_class()
+                await exchange.load_markets()
+                markets = exchange.markets
+                
+                # 过滤有效交易对
+                valid_symbols = set()
+                for symbol, market in markets.items():
+                    if market.get('active') and market['quote'] in QUOTE_CURRENCIES:
+                        # 根据市场类型过滤
+                        if market['type'] in MARKET_TYPES and MARKET_TYPES[market['type']]:
+                            valid_symbols.add(symbol)
+                
+                logger.debug(f"[交易对] {exchange_id} 有效交易对数量: {len(valid_symbols)}")
+                return valid_symbols
+                
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    logger.error(f"[交易对] 获取 {exchange_id} 交易对失败: {str(e)}")
+                    return set()
+                logger.warning(f"[交易对] {exchange_id} 获取失败，将在5秒后重试 ({attempt+1}/{max_retries})")
+                await asyncio.sleep(5)
+        return set()
+
+    try:
+        tasks = [fetch_exchange_symbols(ex_id) for ex_id in EXCHANGES]
+        results = await asyncio.gather(*tasks)
+        
+        common_symbols = None
+        for exchange_id, symbols in zip(EXCHANGES, results):
+            if not symbols:
+                continue
+            if common_symbols is None:
+                common_symbols = symbols
+            else:
+                common_symbols &= symbols
+            logger.info(f"[交易对] {exchange_id} 共同交易对剩余数量: {len(common_symbols or [])}")
+
+        if not common_symbols:
+            logger.warning("[交易对] 未找到共同交易对，使用默认列表")
+            return DEFAULT_SYMBOLS
+            
+        common_list = sorted(list(common_symbols))
+        logger.info(f"[交易对] 最终共同交易对数量: {len(common_list)}")
+        return common_list
+        
+    except Exception as e:
+        logger.error(f"[交易对] 获取共同交易对失败: {str(e)}")
+        return DEFAULT_SYMBOLS

@@ -5,6 +5,7 @@ Redis管理器模块
 import os
 import json
 import logging
+import asyncio
 from typing import Dict, Any, Optional, List
 import redis.asyncio as redis
 from dotenv import load_dotenv
@@ -27,6 +28,12 @@ class RedisManager:
         self.pubsub = None
         
         logger.info(f"Redis配置: host={self.redis_host}, port={self.redis_port}, db={self.redis_db}")
+    
+    def get_redis_url(self) -> str:
+        """获取Redis URL"""
+        if self.redis_password:
+            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
         
     async def initialize(self):
         """初始化Redis连接"""
@@ -34,11 +41,9 @@ class RedisManager:
             logger.info("正在连接Redis服务器...")
             
             # 创建Redis连接
-            self.redis = redis.Redis(
-                host=self.redis_host,
-                port=self.redis_port,
-                password=self.redis_password,
-                db=self.redis_db,
+            self.redis = await redis.from_url(
+                self.get_redis_url(),
+                encoding='utf-8',
                 decode_responses=True,
                 socket_timeout=5,
                 socket_connect_timeout=5,
@@ -76,6 +81,16 @@ class RedisManager:
                 logger.info("Redis连接已关闭")
             except Exception as e:
                 logger.error(f"关闭Redis连接时发生错误: {str(e)}")
+    
+    async def ping(self) -> bool:
+        """测试Redis连接"""
+        if not self.redis:
+            return False
+        try:
+            await self.redis.ping()
+            return True
+        except Exception:
+            return False
     
     async def set(self, key: str, value: Any, expire: int = None) -> bool:
         """设置键值对"""
