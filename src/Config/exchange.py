@@ -7,6 +7,9 @@ from typing import Dict, List, Set
 from dotenv import load_dotenv
 import ccxt
 
+# Add rate limit handling
+from ccxt.base.errors import RateLimitExceeded
+
 # 加载环境变量
 load_dotenv()
 

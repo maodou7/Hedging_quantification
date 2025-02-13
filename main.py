@@ -151,266 +151,47 @@ class MonitorSystem:
                 
             # 初始化其他组件
             self.exchange_instance = ExchangeInstance(exchange_config)
-            if not await self.exchange_instance.initialize_all_connections():
-                logger.error("[监控进程] 交易所连接初始化失败")
+            try:
+                await self.exchange_instance.initialize_all_connections()
+                if not self.exchange_instance.is_connected():
+                    logger.error("[监控进程] 交易所连接初始化失败")
+                    return False
+                if not await self.redis_manager.initialize():
+                    logger.error("[监控进程] Redis连接失败")
+                    return False
+            except Exception as e:
+                logger.error(f"[监控进程] 初始化过程发生错误: {str(e)}")
                 return False
-                
+
             self.exchange_factory = ExchangeFactory()
             self.market_structure_fetcher = MarketStructureFetcher(self.exchange_instance)
             self.cache_manager = CacheManager()
-            
-            # 初始化价格监控器
-            self.price_monitor = PriceMonitor(
-                exchange_instance=self.exchange_instance
-            )
-            
-            # 添加要监控的交易对
+            self.price_monitor = PriceMonitor(exchange_instance=self.exchange_instance)
             for exchange_id in EXCHANGES:
                 self.price_monitor.add_symbols(exchange_id, SYMBOLS)
-            
             return True
         except Exception as e:
-            logger.error(f"[监控进程] 初始化失败: {str(e)}")
+            logger.error(f"[监控进程] 初始化系统时发生错误: {str(e)}")
             return False
-            
-    async def start(self):
-        """启动系统"""
-        if await self.initialize():
-            logger.info("[监控进程] 系统初始化完成，开始运行...")
-            try:
-                # 创建并发监控任务
-                monitor_task = asyncio.create_task(self.price_monitor.start_monitoring())
-                health_check_task = asyncio.create_task(self._health_check())
-                
-                # 使用wait处理多个任务
-                await asyncio.wait(
-                    [monitor_task, health_check_task],
-                    return_when=asyncio.FIRST_EXCEPTION
-                )
-                
-            except Exception as e:
-                logger.error(f"[监控进程] 运行时错误: {str(e)}")
-                await self.stop()
-        else:
-            logger.error("[监控进程] 系统初始化失败，无法启动")
-            
+
     async def stop(self):
-        """停止系统"""
-        self.running = False
+        if self.running:
+            self.running = False
         try:
-            # 并行关闭所有资源
+            # Parallelly close all resources
             close_tasks = []
             if self.price_monitor:
                 close_tasks.append(self.price_monitor.stop_monitoring())
             if self.exchange_instance:
-                close_tasks.append(self.exchange_instance.close_all())
-            if self.redis_manager:
-                close_tasks.append(self.redis_manager.cleanup())
-            if self.http_session:
-                close_tasks.append(self.http_session.close())
-                
-            await asyncio.gather(*close_tasks, return_exceptions=True)
-            logger.info("[监控进程] 系统已停止")
+                close_tasks.append(self.exchange_instance.close_all_connections())
+            if close_tasks:
+                await asyncio.gather(*close_tasks)
         except Exception as e:
             logger.error(f"[监控进程] 停止时发生错误: {str(e)}")
-            
-    async def _health_check(self):
-        """健康检查任务"""
-        while self.running:
-            try:
-                # 检查Redis连接
-                if not await self.redis_manager.ping():
-                    logger.error("[监控进程] Redis连接异常")
-                
-                # 检查交易所连接状态
-                for exchange_id in EXCHANGES:
-                    if not await self.exchange_instance.check_connection(exchange_id):
-                        logger.warning(f"[监控进程] {exchange_id} 连接异常")
-                        
-                await asyncio.sleep(10)
-            except Exception as e:
-                logger.error(f"[监控进程] 健康检查失败: {str(e)}")
-
-def run_monitor(stop_event: Event):
-    """运行监控进程"""
-    monitor_logger = setup_logger('monitor', 'logs/monitor.log')
-    try:
-        # 设置事件循环
-        loop = setup_event_loop()
-        
-        async def run():
-            monitor = MonitorSystem()
-            try:
-                await monitor.start()
-                while not stop_event.is_set() and monitor.running:
-                    await asyncio.sleep(1)
-            except Exception as e:
-                monitor_logger.error(f"[监控进程] 运行时错误: {str(e)}")
-            finally:
-                try:
-                    await monitor.stop()
-                except Exception as e:
-                    monitor_logger.error(f"[监控进程] 停止时发生错误: {str(e)}")
-                finally:
-                    # 确保所有资源都被清理
-                    if hasattr(monitor, 'exchange_instance') and monitor.exchange_instance:
-                        try:
-                            await monitor.exchange_instance.close_all()
-                        except Exception as e:
-                            monitor_logger.error(f"[监控进程] 关闭交易所实例时发生错误: {str(e)}")
-                    
-                    if hasattr(monitor, 'redis_manager') and monitor.redis_manager:
-                        try:
-                            await monitor.redis_manager.cleanup()
-                        except Exception as e:
-                            monitor_logger.error(f"[监控进程] 关闭Redis连接时发生错误: {str(e)}")
-                
-        loop.run_until_complete(run())
-    except Exception as e:
-        monitor_logger.error(f"[监控进程] 致命错误: {str(e)}")
-    finally:
-        try:
-            pending = asyncio.all_tasks(loop)
-            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-            loop.run_until_complete(loop.shutdown_asyncgens())
-        except Exception as e:
-            monitor_logger.error(f"[监控进程] 清理事件循环时发生错误: {str(e)}")
         finally:
-            loop.close()
-
-def run_api_server():
-    """运行API服务器"""
-    api_logger = setup_logger('api', 'logs/api.log')
-    try:
-        if platform.system() == 'Linux':
-            # Linux系统下使用gunicorn
-            import gunicorn.app.base
-
-            class StandaloneApplication(gunicorn.app.base.BaseApplication):
-                def __init__(self, app, options=None):
-                    self.options = options or {}
-                    self.application = app
-                    super().__init__()
-
-                def load_config(self):
-                    config = {key: value for key, value in self.options.items()
-                             if key in self.cfg.settings and value is not None}
-                    for key, value in config.items():
-                        self.cfg.set(key.lower(), value)
-
-                def load(self):
-                    return self.application
-
-            options = {
-                'bind': '0.0.0.0:8000',
-                'workers': 4,
-                'worker_class': 'uvicorn.workers.UvicornWorker',
-                'preload_app': True,
-                'accesslog': '-',
-                'errorlog': '-',
-                'loglevel': 'info',
-            }
-
-            StandaloneApplication(app, options).run()
-        else:
-            # Windows系统下使用uvicorn
-            uvicorn.run(
-                "src.api.api_server:app",
-                host="0.0.0.0",
-                port=8000,
-                reload=True,
-                log_config=None,
-                access_log=False
-            )
-    except Exception as e:
-        api_logger.error(f"[API进程] 运行时错误: {str(e)}")
-
-async def main():
-    """主函数"""
-    try:
-        # 创建停止事件
-        stop_event = Event()
-        
-        # 启动监控进程
-        monitor_process = Process(target=run_monitor, args=(stop_event,))
-        monitor_process.start()
-        logger.info("[主进程] 监控进程已启动")
-        
-        # 启动API服务器进程
-        api_process = Process(target=run_api_server)
-        api_process.start()
-        logger.info("[主进程] API服务器进程已启动")
-        
-        # 等待中断信号
-        def signal_handler(signum, frame):
-            logger.info("\n[主进程] 收到停止信号，正在关闭系统...")
-            stop_event.set()
-            monitor_process.join(timeout=5)
-            api_process.terminate()
-            api_process.join(timeout=5)
-            
-            # 安全终止进程（带超时和日志记录）
-            logger.info("[主进程] 开始终止子进程...")
-            
-            # 终止监控进程
-            if monitor_process.is_alive():
-                logger.warning("[主进程] 监控进程未正常退出，开始终止...")
-                monitor_process.terminate()
-                monitor_process.join(timeout=3)
-                if monitor_process.is_alive():
-                    logger.error("[主进程] 强制终止监控进程")
-                    monitor_process.kill()
-            
-            # 终止API进程
-            if api_process.is_alive():
-                logger.warning("[主进程] API进程未正常退出，开始终止...")
-                api_process.terminate()
-                api_process.join(timeout=3)
-                if api_process.is_alive():
-                    logger.error("[主进程] 强制终止API进程")
-                    api_process.kill()
-            
-            logger.info("[主进程] 所有子进程已终止")
-                
-            sys.exit(0)
-            
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-        
-        # 保持主进程运行并监控子进程状态
-        while True:
-            if not monitor_process.is_alive():
-                logger.error("[主进程] 监控进程异常退出")
-                api_process.terminate()
-                sys.exit(1)
-            if not api_process.is_alive():
-                logger.error("[主进程] API服务器进程异常退出")
-                stop_event.set()
-                monitor_process.join()
-                sys.exit(1)
-            await asyncio.sleep(1)
-            
-    except Exception as e:
-        logger.error(f"[主进程] 运行时错误: {str(e)}")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    # Windows系统下多进程启动保护
-    if platform.system() == 'Windows':
-        multiprocessing.freeze_support()
-        
-    # 设置事件循环
-    loop = setup_event_loop()
-    try:
-        loop.run_until_complete(main())
-    except KeyboardInterrupt:
-        logger.info("\n程序被用户中断")
-    except Exception as e:
-        logger.error(f"程序异常退出: {str(e)}")
-    finally:
-        # 彻底清理事件循环
-        try:
-            loop.run_until_complete(loop.shutdown_asyncgens())
-            loop.close()
-        except:
-            pass
+            # Ensure all resources are cleared
+            if hasattr(self, 'exchange_instance') and self.exchange_instance:
+                try:
+                    await self.exchange_instance.close_all_connections()
+                except Exception as e:
+                    logger.error(f"[监控进程] 关闭交易所实例时发生错误: {str(e)}")

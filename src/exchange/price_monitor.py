@@ -136,19 +136,46 @@ class PriceMonitor:
             try:
                 while self.is_running:
                     try:
-                        ticker = await ws.watch_ticker(symbol)
+                        try:
+                            ticker = await ws.watch_ticker(symbol)
+                        except RateLimitExceeded as e:
+                            await handle_rate_limit_exceeded(exchange_id, ws, str(e))
+                            break
                         if ticker and ticker.get('last'):
                             await self._process_ticker_data(exchange_id, market_type, symbol, ticker)
                             
                             # 心跳保持
                             if hasattr(ws, '_last_heartbeat') and ws._last_heartbeat % 100 == 0:
                                 await ws.keep_alive()
-                                
+                                 
                     except (ccxt.NetworkError, ccxt.ExchangeError) as e:
                         await self._handle_reconnect(exchange_id, ws, str(e))
                         break
             finally:
                 await self._release_ws_connection(exchange_id, ws)
+
+# Add rate limit handling
+from ccxt.base.errors import RateLimitExceeded
+
+# Add proper connection management
+async def close_ws_connection(ws: ccxtpro.Exchange):
+    try:
+        await ws.close()
+    except Exception as e:
+        logger.error(f"Failed to close WebSocket connection: {str(e)}")
+
+# Add error handling for rate limit exceeded
+async def handle_rate_limit_exceeded(exchange_id: str, ws: ccxtpro.Exchange, error_msg: str):
+    logger.warning(f"{exchange_id} hit rate limit: {error_msg}")
+    await asyncio.sleep(60)  # Wait for 60 seconds before retrying
+    await reset_ws_connection(exchange_id)
+
+# Add function to reset WebSocket connection
+async def reset_ws_connection(exchange_id: str):
+    try:
+        await exchange_instance.reset_ws_connection(exchange_id)
+    except Exception as e:
+        logger.error(f"Failed to reset WebSocket connection for {exchange_id}: {str(e)}")
 
     async def _process_ticker_data(self, exchange_id: str, market_type: str, symbol: str, ticker: dict):
         """处理并存储ticker数据"""

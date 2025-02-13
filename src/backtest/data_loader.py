@@ -15,6 +15,9 @@ import ccxt
 import os
 from src.utils.logger import ArbitrageLogger
 
+# Add rate limit handling
+from ccxt.base.errors import RateLimitExceeded
+
 class DataLoader:
     def __init__(self):
         self.logger = ArbitrageLogger()
@@ -55,6 +58,10 @@ class DataLoader:
                         ohlcv.extend(batch)
                         current_time = datetime.fromtimestamp(batch[-1][0] / 1000) + timedelta(minutes=1)
                         
+                    except RateLimitExceeded as e:
+                        self.logger.warning(f"达到速率限制，等待重试: {str(e)}")
+                        await asyncio.sleep(exchange.rateLimit / 1000)
+                        continue
                     except Exception as e:
                         self.logger.error(f"获取数据时发生错误: {str(e)}")
                         break
@@ -201,4 +208,4 @@ class DataLoader:
             
         except Exception as e:
             self.logger.error(f"合并数据时发生错误: {str(e)}")
-            return {} 
+            return {}

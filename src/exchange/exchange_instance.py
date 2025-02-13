@@ -27,6 +27,9 @@ from src.config.exchange import (
 )
 from src.utils.logger import ArbitrageLogger
 
+# Add rate limit handling
+from ccxt.base.errors import RateLimitExceeded
+
 class ExchangeInstance:
     """交易所实例管理类（优化版）"""
     
@@ -44,6 +47,76 @@ class ExchangeInstance:
         self._health_check_task: Optional[asyncio.Task] = None
         self._symbol_cache: Dict[str, Dict[str, bool]] = defaultdict(dict)
 
+    async def _create_rest_instance(self, exchange_id: str, config: dict) -> Optional[ccxt.Exchange]:
+        """创建REST API实例"""
+        try:
+            exchange_config = get_exchange_config(exchange_id)
+            
+            exchange_class = getattr(ccxt.async_support, exchange_id)
+            instance = exchange_class({
+                'enableRateLimit': True,
+                'timeout': config.get('rest_timeout', 30000),
+                **exchange_config
+            })
+            
+            # 加载市场数据
+            await instance.load_markets()
+            
+            # 验证配置中的交易对是否有效
+            valid_symbols = []
+            for symbol in instance.markets:
+                market = instance.markets[symbol]
+                if (market.get('active') and 
+                    market.get('quote') in QUOTE_CURRENCIES and
+                    market.get('spot', False)):  # 只验证现货交易对
+                    valid_symbols.append(symbol)
+            
+            if not valid_symbols:
+                self.logger.warning(f"{exchange_id} 配置中无有效交易对")
+                return None
+            
+            return instance
+            
+        except (RateLimitExceeded, Exception) as e:
+            self.logger.error(f"创建REST实例失败 {exchange_id}: {str(e)}")
+            return None
+    
+    async def _create_ws_instance(self, exchange_id: str, config: dict) -> Optional[ccxtpro.Exchange]:
+        """创建WebSocket实例"""
+        try:
+            exchange_config = get_exchange_config(exchange_id)
+            
+            exchange_class = getattr(ccxtpro, exchange_id)
+            instance = exchange_class({
+                'enableRateLimit': True,
+                'timeout': config.get('ws_timeout', 30000),
+                **exchange_config
+            })
+            
+            await instance.load_markets()
+            return instance
+            
+        except (RateLimitExceeded, Exception) as e:
+            self.logger.error(f"创建WS实例失败 {exchange_id}: {str(e)}")
+            return None
+
+    async def check_connection(self, exchange_id: str) -> bool:
+        """
+        检查交易所连接状态
+        :return: 连接是否正常
+        """
+        try:
+            instance = self._rest_instances.get(exchange_id)
+            if not instance:
+                return False
+            
+            # 尝试获取服务器时间来测试连接
+            await instance.fetch_time()
+            return True
+            
+        except (RateLimitExceeded, Exception) as e:
+            logger.error(f"检查交易所 {exchange_id} 连接时发生错误: {str(e)}")
+            return False
     def _convert_symbol_format(self, exchange_id: str, symbol: str) -> str:
         """转换交易对格式为交易所特定格式"""
         try:

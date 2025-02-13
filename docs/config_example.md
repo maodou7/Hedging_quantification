@@ -2,17 +2,46 @@
 
 ## 1. 环境配置 (.env)
 
-```bash
-# 基础环境配置
-ENV=production
-DEBUG=false
-LOG_LEVEL=INFO
+```ini
+# 基础配置
+ENV=development                 # 运行环境：development/testing/production
+DEBUG=true                     # 调试模式
+LOG_LEVEL=INFO                 # 日志级别
 
 # Redis配置
 REDIS_HOST=localhost
 REDIS_PORT=6379
-REDIS_PASSWORD=your_password
 REDIS_DB=0
+REDIS_PASSWORD=
+
+# 数据库配置
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=crypto_arbitrage
+DB_USER=postgres
+DB_PASSWORD=
+
+# GUI配置
+GUI_ENABLED=true              # 是否启用GUI界面
+GUI_THEME=dark               # GUI主题：light/dark
+GUI_REFRESH_RATE=1000       # GUI刷新率（毫秒）
+
+# 交易所API配置
+## Binance
+BINANCE_API_KEY=your_api_key
+BINANCE_API_SECRET=your_api_secret
+BINANCE_TESTNET=true
+
+## Bybit
+BYBIT_API_KEY=your_api_key
+BYBIT_API_SECRET=your_api_secret
+BYBIT_TESTNET=true
+
+## OKX
+OKX_API_KEY=your_api_key
+OKX_API_SECRET=your_api_secret
+OKX_PASSPHRASE=your_passphrase
+OKX_TESTNET=true
 
 # 交易所API配置
 BINANCE_API_KEY=your_api_key
@@ -292,4 +321,35 @@ LOG_CONFIG = {
         }
     }
 }
+```
+
+## 监控配置 (monitoring.yaml)
+
+```yaml
+prometheus:
+  enabled: true
+  port: 9090
+  path: /metrics
+
+alerts:
+  slack:
+    enabled: true
+    webhook_url: your_webhook_url
+  email:
+    enabled: true
+    smtp_server: smtp.gmail.com
+    smtp_port: 587
+    sender: your_email@gmail.com
+    recipients:
+      - admin@example.com
+
+metrics:
+  system:
+    cpu_usage: true
+    memory_usage: true
+    disk_usage: true
+  trading:
+    order_count: true
+    trade_volume: true
+    profit_loss: true
 ```

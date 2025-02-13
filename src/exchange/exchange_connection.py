@@ -6,6 +6,9 @@ import asyncio
 import logging
 from typing import Dict, Any, Optional
 
+# Add rate limit handling
+from ccxt.base.errors import RateLimitExceeded
+
 from src.config.exchange import EXCHANGE_CONFIGS, QUOTE_CURRENCIES  # 添加QUOTE_CURRENCIES导入
 
 logger = logging.getLogger(__name__)
@@ -41,7 +44,7 @@ class ExchangeConnection:
             logger.info(f"交易所 {self.exchange_id} 连接初始化成功")
             return True
             
-        except Exception as e:
+        except (RateLimitExceeded, Exception) as e:
             self.last_error = e
             logger.error(f"交易所 {self.exchange_id} 连接初始化失败: {str(e)}")
             return False
@@ -74,8 +77,8 @@ class ExchangeConnection:
             self.exchange.fetch_time()
             return True
             
-        except Exception as e:
-            print(f"检查交易所 {self.exchange_id} 连接时发生错误: {str(e)}")
+        except (RateLimitExceeded, Exception) as e:
+            logger.error(f"检查交易所 {self.exchange_id} 连接时发生错误: {str(e)}")
             return False
     
     def get_balance(self) -> Dict[str, Any]:
@@ -89,8 +92,8 @@ class ExchangeConnection:
             
             return self.exchange.fetch_balance()
             
-        except Exception as e:
-            print(f"获取 {self.exchange_id} 余额时发生错误: {str(e)}")
+        except (RateLimitExceeded, Exception) as e:
+            logger.error(f"获取 {self.exchange_id} 余额时发生错误: {str(e)}")
             return {}
     
     def get_market_info(self, symbol: str) -> Dict[str, Any]:
@@ -105,6 +108,6 @@ class ExchangeConnection:
             
             return self.exchange.load_markets().get(symbol, {})
             
-        except Exception as e:
-            print(f"获取 {self.exchange_id} 市场信息时发生错误: {str(e)}")
-            return {} 
+        except (RateLimitExceeded, Exception) as e:
+            logger.error(f"获取 {self.exchange_id} 市场信息时发生错误: {str(e)}")
+            return {}

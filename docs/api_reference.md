@@ -941,3 +941,133 @@ feature_config = {
 # 提取特征
 features = fe.extract_features(data, feature_config)
 ```
+
+## RESTful API
+
+### 交易接口
+
+#### 下单 POST /api/v1/order
+
+创建新的交易订单。
+
+**请求参数：**
+
+```json
+{
+  "symbol": "BTC-USDT",
+  "side": "buy",
+  "type": "limit",
+  "price": 50000.0,
+  "amount": 0.1,
+  "exchange": "binance"
+}
+```
+
+**响应：**
+
+```json
+{
+  "order_id": "123456789",
+  "status": "success",
+  "created_at": "2024-02-09T10:00:00Z"
+}
+```
+
+### 市场数据接口
+
+#### 获取行情 GET /api/v1/ticker/{symbol}
+
+获取指定交易对的最新行情数据。
+
+**响应：**
+
+```json
+{
+  "symbol": "BTC-USDT",
+  "last_price": 50000.0,
+  "bid": 49999.0,
+  "ask": 50001.0,
+  "volume_24h": 1000.0,
+  "timestamp": "2024-02-09T10:00:00Z"
+}
+```
+
+### WebSocket API
+
+#### 市场数据订阅
+
+```javascript
+// 连接WebSocket
+ws = new WebSocket('ws://localhost:8000/ws/market')
+
+// 订阅消息
+{
+    "op": "subscribe",
+    "channel": "ticker",
+    "symbols": ["BTC-USDT", "ETH-USDT"]
+}
+
+// 接收消息
+{
+    "channel": "ticker",
+    "symbol": "BTC-USDT",
+    "data": {
+        "price": 50000.0,
+        "volume": 100.0,
+        "timestamp": "2024-02-09T10:00:00Z"
+    }
+}
+```
+
+## Python SDK
+
+### 初始化
+
+```python
+from crypto_arbitrage import Client
+
+client = Client(
+    api_key="your_api_key",
+    api_secret="your_api_secret",
+    env="production"
+)
+```
+
+### 交易操作
+
+```python
+# 下单
+order = client.create_order(
+    symbol="BTC-USDT",
+    side="buy",
+    type="limit",
+    price=50000.0,
+    amount=0.1
+)
+
+# 查询订单
+order_info = client.get_order(order_id="123456789")
+
+# 取消订单
+client.cancel_order(order_id="123456789")
+```
+
+### 市场数据
+
+```python
+# 获取行情
+ticker = client.get_ticker(symbol="BTC-USDT")
+
+# 获取深度数据
+depth = client.get_orderbook(
+    symbol="BTC-USDT",
+    limit=20
+)
+
+# 获取K线数据
+klines = client.get_klines(
+    symbol="BTC-USDT",
+    interval="1m",
+    limit=100
+)
+```

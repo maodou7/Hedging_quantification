@@ -12,12 +12,16 @@
 
 ```bash
 # 1. 克隆代码库
-git clone [repository_url]
+git clone https://github.com/your-username/crypto-arbitrage.git
+cd crypto-arbitrage
 
 # 2. 安装依赖
-pip install -r requirements.txt
+pip install -e .
 
-# 3. 配置环境变量
+# 3. 安装开发依赖（可选）
+pip install -e .[dev]
+
+# 4. 配置环境变量
 cp .env.example .env
 # 编辑 .env 文件，填入必要的配置信息
 ```
@@ -216,3 +220,94 @@ python tools/monitor_performance.py
 - 调整更新频率
 - 优化计算逻辑
 - 改进执行流程
+
+## 使用说明
+
+### GUI 界面操作
+
+1. 启动 GUI：
+
+```bash
+python start.py --gui
+```
+
+2. 主界面功能：
+
+   - 市场监控：查看实时价格和交易量
+   - 策略管理：配置和启动交易策略
+   - 资金管理：查看账户余额和持仓
+   - 系统设置：调整系统参数
+
+3. 图表功能：
+   - 价格走势图
+   - 交易量分析
+   - 盈亏统计
+
+### 命令行操作
+
+1. 启动系统：
+
+```bash
+# 开发环境
+python start.py
+
+# 生产环境
+ENV=production python start.py
+```
+
+2. 查看日志：
+
+```bash
+tail -f logs/arbitrage.log
+```
+
+### 策略配置
+
+1. 创建策略配置文件：
+
+```yaml
+# config/strategies/triangle_arbitrage.yaml
+name: triangle_arbitrage
+enabled: true
+pairs:
+  - BTC-USDT
+  - ETH-USDT
+  - ETH-BTC
+min_profit: 0.002
+max_amount: 0.1
+```
+
+2. 启用策略：
+   - 通过 GUI 界面启用
+   - 或修改配置文件的 `enabled` 字段
+
+### 风险管理
+
+1. 设置风险参数：
+
+   - 单笔交易限额
+   - 总持仓限额
+   - 止损价格
+
+2. 监控风险指标：
+   - 实时盈亏
+   - 持仓风险
+   - 市场风险
+
+## 常见问题
+
+### 1. 连接问题
+
+如果遇到连接错误：
+
+1. 检查网络连接
+2. 验证 API 密钥
+3. 确认防火墙设置
+
+### 2. 性能优化
+
+提升系统性能的建议：
+
+1. 使用生产环境配置
+2. 优化 Redis 配置
+3. 调整并发参数
