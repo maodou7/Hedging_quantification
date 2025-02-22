@@ -20,6 +20,11 @@ wheels/
 .installed.cfg
 *.egg
 
+# Virtual Environment
+venv/
+env/
+ENV/
+
 # IDE
 .idea/
 .vscode/
@@ -29,44 +34,31 @@ wheels/
 .pydevproject
 .settings/
 
-# 虚拟环境
-venv/
-env/
-ENV/
-
-# 日志和缓存
+# Logs
 logs/
 *.log
-*.log.*
-cache/
-.cache/
-checkpoints/
-market_structures/
-backups/
+npm-debug.log*
 
-# 测试
-.pytest_cache/
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Testing
 .coverage
+.tox/
+.pytest_cache/
 htmlcov/
-tests/__pycache__/
-test_*.py
-!tests/test_*.py
 
-# 数据文件
-data/
-models/
-*.pkl
-*.h5
-*.pt
-*.pth
-*.ckpt
-*.bin
-
-# 环境配置
+# Project specific
+Config/api_keys.py
+Config/secrets.py
+market_structures/*.json
 .env
-.env.*
-!.env.example
+*.db
+*.sqlite3
 
-# 系统文件
+# OS specific
 .DS_Store
 Thumbs.db 

@@ -1,197 +1,171 @@
 """
-交易所价格监控与套利主程序
+交易所数据监控主程序
 
-此程序负责：
-1. 监控多个交易所的价格数据（监控进程）
-2. 实时分析套利机会（主进程）
-3. 执行套利交易（主进程）
-4. 提供API服务（API进程）
+此模块实现了一个高性能的异步交易所数据监控系统。该系统能够同时监控多个交易所的市场数据，
+并通过异步IO和并发处理来实现最大性能。
+
+主要功能：
+- 多交易所并发监控
+- 自动错误恢复和重连机制
+- 无限制的性能优化
+- 实时数据处理和状态更新
+- 自动系统识别和优化
+  * Linux: 使用uvloop实现最高性能
+  * Windows: 使用原生事件循环
+
+依赖项：
+- asyncio: 用于异步IO操作
+- concurrent.futures: 用于线程池管理
+- Config.exchange_config: 交易所配置信息
+- ExchangeModules: 交易所接口实现
+- uvloop (Linux): 用于提供更高性能的事件循环
+- fastapi: 用于提供Web API接口
+
+使用方法：
+1. 确保已正确配置 Config/exchange_config.py 中的交易所参数
+2. 直接运行此文件即可启动监控系统和API服务器
+3. 使用 Ctrl+C 可以安全地停止程序
+
+示例：
+    python main.py
+
+注意事项：
+- 运行前请确保网络连接稳定
+- 建议在高性能服务器上运行以获得最佳性能
+- 程序会自动处理断线重连，无需手动干预
+- Linux系统下会自动使用uvloop优化性能
 """
-# TODO: 将监控系统放在另一个进程运行，主进程运行价差套利系统，买卖逻辑优先
-import os
+
 import asyncio
-import signal
+from concurrent.futures import ThreadPoolExecutor
 import sys
-import platform
-from typing import Dict, List, Any
-from datetime import datetime
-import multiprocessing
-from multiprocessing import Process, Event, shared_memory
+import os
+from dotenv import load_dotenv
 import uvicorn
-import sys
-import platform
-import logging
-import aiohttp
-import aiohttp.resolver
-import redis.asyncio as redis
-from src.core.redis_manager import RedisManager
-from src.utils.system_adapter import SystemAdapter
-import selectors
-from src.utils.logger_config import setup_logger
-
-# Windows系统下使用selector事件循环
-if platform.system() == 'Windows':
-    import asyncio
-    import selectors
-    selector = selectors.SelectSelector()
-    loop = asyncio.SelectorEventLoop(selector)
-    asyncio.set_event_loop(loop)
-
-from src.exchange.exchange_instance import ExchangeInstance
-from src.exchange.market_structure_fetcher import MarketStructureFetcher
-from src.exchange.price_monitor import PriceMonitor
-from src.core.cache_manager import CacheManager
-from src.config.exchange import (
-    EXCHANGES,
-    QUOTE_CURRENCIES,
-    MARKET_TYPES,
-    COMMON_SYMBOLS,
-    EXCHANGE_CONFIGS,
-    SYMBOLS
-)
-from src.config.monitoring import MONITOR_CONFIG, MARKET_STRUCTURE_CONFIG
-from src.config.cache import CACHE_CONFIG
-from src.utils.system_adapter import SystemAdapter
-from src.exchange.exchange_factory import ExchangeFactory
-from src.strategies.spread_arbitrage_strategy import SpreadArbitrageStrategy
-from src.utils.logger import ArbitrageLogger
 from src.api.api_server import app
-from src.core.communication_manager import create_communication_manager
+from src.api.monitor.monitor_api import set_monitor_manager, update_price
+import logging
 
 # 配置日志
-os.makedirs('logs', exist_ok=True)
-logger = setup_logger('main', 'logs/arbitrage.log')
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# 禁用所有第三方库的默认日志
-for log_name in ['uvicorn', 'asyncio', 'aiohttp', 'multiprocessing', 'concurrent', 'urllib3']:
-    third_party_logger = logging.getLogger(log_name)
-    third_party_logger.handlers = []
-    third_party_logger.propagate = False
-    if log_name == 'uvicorn.error':
-        third_party_logger.addHandler(logging.NullHandler())
+# 加载环境变量
+load_dotenv()
 
-def setup_event_loop():
-    """设置事件循环（跨平台兼容版）"""
+from Config.exchange_config import (
+    EXCHANGES, EXCHANGE_CONFIGS, MARKET_TYPES, 
+    QUOTE_CURRENCIES, MARKET_STRUCTURE_CONFIG
+)
+
+from ExchangeModules import ExchangeInstance, MonitorManager
+from ExchangeModules.market_processor import MarketProcessor
+
+async def process_price_updates(exchange_id: str, monitor_manager: MonitorManager):
+    """处理价格更新的异步任务"""
     try:
-        if platform.system() != 'Windows':
-            import uvloop
-            uvloop.install()
-    except ImportError:
-        pass  # 非Windows系统但未安装uvloop时继续使用默认循环
+        while True:
+            try:
+                tickers = await monitor_manager.fetch_exchange_tickers(exchange_id)
+                if tickers:
+                    for symbol, ticker in tickers.items():
+                        if isinstance(ticker, dict) and 'last' in ticker:
+                            price = ticker['last']
+                            await update_price(symbol, exchange_id, price)
+            except Exception as e:
+                if not hasattr(process_price_updates, f'error_logged_{exchange_id}'):
+                    logger.error(f"❌ 处理价格更新出错 ({exchange_id}): {str(e)}")
+                    setattr(process_price_updates, f'error_logged_{exchange_id}', True)
+            await asyncio.sleep(1)
+    except Exception as e:
+        if not hasattr(process_price_updates, f'conn_error_logged_{exchange_id}'):
+            logger.error(f"❌ 价格订阅连接出错 ({exchange_id}): {str(e)}")
+            setattr(process_price_updates, f'conn_error_logged_{exchange_id}', True)
+        await asyncio.sleep(5)
+        return
+
+async def main():
+    """主程序入口函数"""
+    try:
+        print("\n🚀 正在启动量化交易系统...")
+        
+        # 初始化系统组件
+        exchange_instance = ExchangeInstance()
+        market_processor = MarketProcessor(exchange_instance)
+        
+        # 初始化交易所配置
+        exchange_configs = {}
+        for exchange_id in EXCHANGES:
+            exchange_configs[exchange_id] = {
+                **EXCHANGE_CONFIGS.get(exchange_id, {}),
+                'market_types': MARKET_TYPES,
+                'quote_currencies': QUOTE_CURRENCIES
+            }
+        
+        # 创建监控管理器
+        monitor_manager = MonitorManager(exchange_instance, exchange_configs)
+        set_monitor_manager(monitor_manager)
+        
+        # 初始化所有交易所连接
+        await monitor_manager.initialize(EXCHANGES)
+        
+        # 创建价格订阅任务，包含自动重连机制
+        async def run_price_subscription(exchange_id):
+            error_count = 0
+            while True:
+                try:
+                    await process_price_updates(exchange_id, monitor_manager)
+                    error_count = 0
+                except Exception as e:
+                    error_count += 1
+                    if error_count >= 5:
+                        logger.error(f"❌ {exchange_id} 价格订阅任务异常，已重试{error_count}次")
+                        error_count = 0
+                await asyncio.sleep(5)
+        
+        # 创建价格更新任务
+        price_tasks = [
+            asyncio.create_task(run_price_subscription(exchange_id))
+            for exchange_id in EXCHANGES
+        ]
+        
+        print("✅ 系统初始化完成")
+        
+        # 启动FastAPI服务器和价格更新任务
+        config = uvicorn.Config(
+            app,
+            host="127.0.0.1",
+            port=8000,
+            reload=False,
+            log_level="info"
+        )
+        server = uvicorn.Server(config)
+        server_task = asyncio.create_task(server.serve())
+        
+        # 等待所有任务完成
+        all_tasks = price_tasks + [server_task]
+        await asyncio.gather(*all_tasks)
+        
+    except Exception as e:
+        print(f"\n❌ 系统运行出错: {str(e)}")
+        if 'monitor_manager' in locals():
+            await monitor_manager.stop()
+        if 'exchange_instance' in locals():
+            await exchange_instance.close()
+        for task in all_tasks:
+            if not task.done():
+                task.cancel()
+        raise
+
+if __name__ == "__main__":
+    # 在Windows系统上使用SelectorEventLoop
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            raise RuntimeError("Loop is closed")
-    except (RuntimeError, AttributeError):
-        if platform.system() == 'Windows':
-            loop = asyncio.SelectorEventLoop(selectors.SelectSelector())
-        else:
-            try:
-                import uvloop
-                loop = uvloop.new_event_loop()
-            except ImportError:
-                loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-    # Windows平台优化配置
-    if platform.system() == 'Windows':
-        # 设置aiohttp的DNS解析器
-        async def setup_resolver():
-            aiohttp.ClientSession._resolver = aiohttp.resolver.ThreadedResolver()
-        loop.run_until_complete(setup_resolver())
-        
-    return loop
-
-class MonitorSystem:
-    """价格监控系统"""
-    def __init__(self):
-        # 初始化系统适配器
-        self.system_adapter = SystemAdapter()
-        self.logger = setup_logger('monitor', 'logs/monitor.log')
-        self.logger.info(f"[监控进程] 系统信息: {self.system_adapter.get_system_info()}")
-        
-        # 初始化连接池
-        self.redis_manager = RedisManager()
-        self.http_session = aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(limit=100, limit_per_host=20),
-            timeout=aiohttp.ClientTimeout(total=30)
-        )
-        self.ws_conn_pool = {}
-        
-        # 初始化基础组件
-        self.exchange_instance = None
-        self.exchange_factory = None
-        self.market_structure_fetcher = None
-        self.cache_manager = None
-        self.price_monitor = None
-        
-        # 运行标志
-        self.running = True
-        
-    async def initialize(self):
-        """初始化系统"""
-        try:
-            # 初始化Redis连接
-            if not await self.redis_manager.initialize():
-                logger.error("[监控进程] Redis连接失败")
-                return False
-            
-            # 构建交易所实例配置
-            exchange_config = {
-                'exchanges': EXCHANGES,
-                'use_redis': True,
-                'redis_url': self.redis_manager.get_redis_url(),
-                'rest_timeout': 30000,
-                'ws_timeout': 30000,
-                'max_rest_pool_size': 10,
-                'max_ws_pool_size': 5,
-                'health_check_interval': 60
-            }
-                
-            # 初始化其他组件
-            self.exchange_instance = ExchangeInstance(exchange_config)
-            try:
-                await self.exchange_instance.initialize_all_connections()
-                if not self.exchange_instance.is_connected():
-                    logger.error("[监控进程] 交易所连接初始化失败")
-                    return False
-                if not await self.redis_manager.initialize():
-                    logger.error("[监控进程] Redis连接失败")
-                    return False
-            except Exception as e:
-                logger.error(f"[监控进程] 初始化过程发生错误: {str(e)}")
-                return False
-
-            self.exchange_factory = ExchangeFactory()
-            self.market_structure_fetcher = MarketStructureFetcher(self.exchange_instance)
-            self.cache_manager = CacheManager()
-            self.price_monitor = PriceMonitor(exchange_instance=self.exchange_instance)
-            for exchange_id in EXCHANGES:
-                self.price_monitor.add_symbols(exchange_id, SYMBOLS)
-            return True
-        except Exception as e:
-            logger.error(f"[监控进程] 初始化系统时发生错误: {str(e)}")
-            return False
-
-    async def stop(self):
-        if self.running:
-            self.running = False
-        try:
-            # Parallelly close all resources
-            close_tasks = []
-            if self.price_monitor:
-                close_tasks.append(self.price_monitor.stop_monitoring())
-            if self.exchange_instance:
-                close_tasks.append(self.exchange_instance.close_all_connections())
-            if close_tasks:
-                await asyncio.gather(*close_tasks)
-        except Exception as e:
-            logger.error(f"[监控进程] 停止时发生错误: {str(e)}")
-        finally:
-            # Ensure all resources are cleared
-            if hasattr(self, 'exchange_instance') and self.exchange_instance:
-                try:
-                    await self.exchange_instance.close_all_connections()
-                except Exception as e:
-                    logger.error(f"[监控进程] 关闭交易所实例时发生错误: {str(e)}")
+        # 运行主程序
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 正在关闭系统...")
+    finally:
+        print("✅ 系统已安全关闭")

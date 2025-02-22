@@ -3,12 +3,22 @@
 包含交易所连接信息和市场结构配置
 """
 import os
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Optional, Any
 from dotenv import load_dotenv
 import ccxt
+import asyncio
+import logging
+from typing import Dict, Any, Optional, List
+from src.core.cache_manager import CacheManager
 
 # Add rate limit handling
 from ccxt.base.errors import RateLimitExceeded
+
+def get_exchange_config(exchange_id: str) -> Dict[str, Any]:
+    """获取交易所配置"""
+    if exchange_id not in EXCHANGE_CONFIGS:
+        return None
+    return EXCHANGE_CONFIGS[exchange_id]
 
 # 加载环境变量
 load_dotenv()
@@ -151,7 +161,8 @@ QUOTE_CURRENCIES = ["USDT"]
 MARKET_TYPES = {
     "spot": True,      # 现货市场
     "futures": False,  # 期货市场
-    "swap": False      # 永续合约市场
+    "swap": False,     # 永续合约市场
+    "margin": False    # 杠杆市场
 }
 
 # Redis配置
@@ -233,6 +244,71 @@ CACHE_MODE = {
     }
 }
 
+# 交易所配置
+EXCHANGE_CONFIGS = {
+    'binance': {
+        'name': 'Binance',
+        'api_key': os.getenv('BINANCE_API_KEY', ''),
+        'api_secret': os.getenv('BINANCE_SECRET', ''),
+        'market_types': ['spot'],
+        'quote_currencies': ['USDT', 'BUSD'],
+        'rate_limits': {
+            'requests_per_second': 20,
+            'orders_per_second': 10
+        },
+        'timeout': 30000
+    },
+    'bybit': {
+        'name': 'Bybit',
+        'api_key': os.getenv('BYBIT_API_KEY', ''),
+        'api_secret': os.getenv('BYBIT_SECRET', ''),
+        'market_types': ['spot'],
+        'quote_currencies': ['USDT'],
+        'rate_limits': {
+            'requests_per_second': 10,
+            'orders_per_second': 5
+        },
+        'timeout': 30000
+    },
+    'okx': {
+        'name': 'OKX',
+        'api_key': os.getenv('OKX_API_KEY', ''),
+        'api_secret': os.getenv('OKX_SECRET', ''),
+        'password': os.getenv('OKX_PASSWORD', ''),
+        'market_types': ['spot'],
+        'quote_currencies': ['USDT'],
+        'rate_limits': {
+            'requests_per_second': 20,
+            'orders_per_second': 10
+        },
+        'timeout': 30000
+    },
+    'huobi': {
+        'name': 'Huobi',
+        'api_key': os.getenv('HUOBI_API_KEY', ''),
+        'api_secret': os.getenv('HUOBI_SECRET', ''),
+        'market_types': ['spot'],
+        'quote_currencies': ['USDT'],
+        'rate_limits': {
+            'requests_per_second': 10,
+            'orders_per_second': 5
+        },
+        'timeout': 30000
+    },
+    'gateio': {
+        'name': 'Gate.io',
+        'api_key': os.getenv('GATEIO_API_KEY', ''),
+        'api_secret': os.getenv('GATEIO_SECRET', ''),
+        'market_types': ['spot'],
+        'quote_currencies': ['USDT'],
+        'rate_limits': {
+            'requests_per_second': 10,
+            'orders_per_second': 5
+        },
+        'timeout': 30000
+    }
+}
+
 # 市场结构配置
 MARKET_STRUCTURE_CONFIG = {
     "cache_prefix": "market",
@@ -245,26 +321,118 @@ MARKET_STRUCTURE_CONFIG = {
     }
 }
 
-# 动态获取共有交易对（异步）
-async def update_common_symbols():
-    """更新共有交易对列表"""
-    from src.core.cache_manager import cache
+logger = logging.getLogger("arbitrage")
+
+def get_or_create_eventloop():
+    """获取或创建事件循环"""
     try:
-        global COMMON_SYMBOLS
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop
+
+async def get_common_symbols_async(max_retries: int = 3) -> List[str]:
+    """
+    异步获取所有交易所共有的交易对
+    """
+    try:
+        common_symbols = set()
+        first = True
+        
+        # 确保 EXCHANGE_CONFIGS 已定义
+        exchange_configs = {name: get_exchange_config(name) for name in EXCHANGES}
+        
+        for exchange_name in EXCHANGES:
+            try:
+                config = exchange_configs[exchange_name]
+                if not config:
+                    logger.warning(f"未找到交易所 {exchange_name} 的配置")
+                    continue
+                
+                # 创建交易所实例
+                exchange_class = getattr(ccxt.async_support, exchange_name)
+                exchange = exchange_class(config)
+                
+                # 加载市场数据
+                markets = await exchange.load_markets()
+                symbols = [symbol for symbol in markets.keys() if markets[symbol]['active'] and markets[symbol]['spot']]
+                
+                if not symbols:
+                    logger.warning(f"交易所 {exchange_name} 没有可用的交易对")
+                    continue
+                
+                if first:
+                    common_symbols = set(symbols)
+                    first = False
+                else:
+                    common_symbols &= set(symbols)
+                    
+            except Exception as e:
+                logger.error(f"获取交易所 {exchange_name} 交易对时出错: {str(e)}")
+                continue
+            finally:
+                if 'exchange' in locals():
+                    await exchange.close()
+        
+        return list(common_symbols) if common_symbols else DEFAULT_SYMBOLS
+        
+    except Exception as e:
+        logger.error(f"获取共有交易对失败: {str(e)}")
+        return DEFAULT_SYMBOLS
+
+async def update_common_symbols() -> Optional[List[str]]:
+    """更新共有交易对列表"""
+    try:
+        cache = CacheManager()
         new_symbols = await get_common_symbols_async()
         if new_symbols:
+            global COMMON_SYMBOLS
             COMMON_SYMBOLS = new_symbols
-            await cache.set("common_symbols", new_symbols, ex=3600)  # 缓存1小时
+            await cache.set("common_symbols", new_symbols, expire=3600)  # 使用 expire 而不是 ex
+        return new_symbols
     except Exception as e:
-        from src.utils.logger import ArbitrageLogger
-        ArbitrageLogger().error(f"更新交易对失败: {str(e)}")
+        logger.error(f"更新交易对失败: {str(e)}")
+        return None
 
-# 初始化时立即更新
-import asyncio
-try:
-    COMMON_SYMBOLS = asyncio.run(update_common_symbols()) or DEFAULT_SYMBOLS
-except:
-    COMMON_SYMBOLS = DEFAULT_SYMBOLS
+def initialize_common_symbols():
+    """初始化共有交易对"""
+    try:
+        from src.utils.system_adapter import SystemAdapter
+        system_adapter = SystemAdapter()
+        
+        # 获取或创建事件循环
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                logger.warning("事件循环已在运行，使用默认交易对")
+                return DEFAULT_SYMBOLS
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+        # 使用 run_until_complete 运行异步函数
+        if not loop.is_closed():
+            symbols = loop.run_until_complete(update_common_symbols())
+            if symbols:
+                return symbols
+        return DEFAULT_SYMBOLS
+    except Exception as e:
+        logger.error(f"初始化交易对失败: {str(e)}")
+        return DEFAULT_SYMBOLS
+    finally:
+        try:
+            if 'loop' in locals() and not loop.is_closed() and not loop.is_running():
+                loop.stop()
+        except Exception as e:
+            logger.error(f"停止事件循环失败: {str(e)}")
+
+# 初始化 COMMON_SYMBOLS
+COMMON_SYMBOLS = initialize_common_symbols()
 
 # 要监控的交易对
 SYMBOLS = COMMON_SYMBOLS
@@ -371,165 +539,8 @@ INDICATOR_CONFIG = {
         "validation_split": 0.2
     }
 }
-
-def get_exchange_config(exchange_name: str) -> Dict:
-    """获取交易所配置，从环境变量中读取敏感信息"""
-    base_config = {
-        'enableRateLimit': True,
-        'timeout': 30000,
-        'options': {
-            'defaultType': 'spot',  # 默认为现货
-            'adjustForTimeDifference': True,
-            'recvWindow': 60000,
-            'createMarketBuyOrderRequiresPrice': False,
-            'warnOnFetchOHLCVLimitArgument': False,
-            'fetchOrderBookLimit': 100,
-            'defaultMarginMode': 'cross',  # 默认全仓模式
-            'defaultPositionType': 'isolated'  # 默认逐仓模式
-        },
-        'rateLimit': 100,
-        'httpExceptions': {
-            '429': True,  # 处理请求过多的错误
-            '418': True,  # 处理IP封禁
-            '404': True,  # 处理资源不存在
-            '403': True,  # 处理权限错误
-            '400': True   # 处理请求错误
-        }
-    }
-    
-    # 从环境变量获取API密钥
-    api_configs = {
-        'binance': {
-            'apiKey': os.getenv('BINANCE_API_KEY'),
-            'secret': os.getenv('BINANCE_SECRET'),
-            'options': {
-                'defaultType': 'spot',
-                'adjustForTimeDifference': True,
-                'warnOnFetchOHLCVLimitArgument': False,
-                'recvWindow': 60000,
-                'createMarketBuyOrderRequiresPrice': False,
-                'fetchTradesMethod': 'publicGetAggTrades',
-                'defaultContractType': 'perpetual'  # 永续合约
-            }
-        },
-        'bybit': {
-            'apiKey': os.getenv('BYBIT_API_KEY'),
-            'secret': os.getenv('BYBIT_SECRET'),
-            'options': {
-                'defaultType': 'spot',
-                'defaultContractType': 'perpetual'
-            }
-        },
-        'okx': {
-            'apiKey': os.getenv('OKX_API_KEY'),
-            'secret': os.getenv('OKX_SECRET'),
-            'password': os.getenv('OKX_PASSWORD'),
-            'options': {
-                'defaultType': 'spot',
-                'defaultContractType': 'swap'  # OKX的永续合约称为swap
-            }
-        },
-        'huobi': {
-            'apiKey': os.getenv('HUOBI_API_KEY'),
-            'secret': os.getenv('HUOBI_SECRET'),
-            'options': {
-                'defaultType': 'spot',
-                'defaultContractType': 'swap'
-            }
-        },
-        'gateio': {
-            'apiKey': os.getenv('GATEIO_API_KEY'),
-            'secret': os.getenv('GATEIO_SECRET'),
-            'options': {
-                'defaultType': 'spot',
-                'defaultContractType': 'swap'
-            }
-        }
-    }
-    
-    if exchange_name not in api_configs:
-        raise ValueError(f"不支持的交易所: {exchange_name}")
-    
-    # 合并基础配置和特定配置
-    exchange_config = base_config.copy()
-    specific_config = api_configs[exchange_name]
-    
-    # 合并options
-    if 'options' in specific_config:
-        exchange_config['options'].update(specific_config['options'])
-    # 合并其他配置
-    for key, value in specific_config.items():
-        if key != 'options':
-            exchange_config[key] = value
-    
-    return exchange_config
-
-# 交易所完整配置（动态获取）
-EXCHANGE_CONFIGS = {name: get_exchange_config(name) for name in EXCHANGES}
-
-def initialize_common_symbols(symbols: List[str]):
-    """初始化共有交易对"""
-    global COMMON_SYMBOLS
-    COMMON_SYMBOLS = symbols
-
-async def get_common_symbols_async(max_retries: int = 3) -> List[str]:
-    """
-    异步获取所有交易所共同支持的交易对（带重试机制）
-    返回所有交易所都支持的交易对的交集
-    """
-    from src.utils.logger import ArbitrageLogger
-    logger = ArbitrageLogger()
-    
-    async def fetch_exchange_symbols(exchange_id: str) -> Set[str]:
-        """异步获取单个交易所的交易对"""
-        for attempt in range(max_retries):
-            try:
-                exchange_class = getattr(ccxt, exchange_id)
-                exchange = exchange_class()
-                await exchange.load_markets()
-                markets = exchange.markets
-                
-                # 过滤有效交易对
-                valid_symbols = set()
-                for symbol, market in markets.items():
-                    if market.get('active') and market['quote'] in QUOTE_CURRENCIES:
-                        # 根据市场类型过滤
-                        if market['type'] in MARKET_TYPES and MARKET_TYPES[market['type']]:
-                            valid_symbols.add(symbol)
-                
-                logger.debug(f"[交易对] {exchange_id} 有效交易对数量: {len(valid_symbols)}")
-                return valid_symbols
-                
-            except Exception as e:
-                if attempt == max_retries - 1:
-                    logger.error(f"[交易对] 获取 {exchange_id} 交易对失败: {str(e)}")
-                    return set()
-                logger.warning(f"[交易对] {exchange_id} 获取失败，将在5秒后重试 ({attempt+1}/{max_retries})")
-                await asyncio.sleep(5)
-        return set()
-
-    try:
-        tasks = [fetch_exchange_symbols(ex_id) for ex_id in EXCHANGES]
-        results = await asyncio.gather(*tasks)
-        
-        common_symbols = None
-        for exchange_id, symbols in zip(EXCHANGES, results):
-            if not symbols:
-                continue
-            if common_symbols is None:
-                common_symbols = symbols
-            else:
-                common_symbols &= symbols
-            logger.info(f"[交易对] {exchange_id} 共同交易对剩余数量: {len(common_symbols or [])}")
-
-        if not common_symbols:
-            logger.warning("[交易对] 未找到共同交易对，使用默认列表")
-            return DEFAULT_SYMBOLS
-            
-        common_list = sorted(list(common_symbols))
-        logger.info(f"[交易对] 最终共同交易对数量: {len(common_list)}")
-        return common_list
-        
-    except Exception as e:
-        logger.error(f"[交易对] 获取共同交易对失败: {str(e)}")
-        return DEFAULT_SYMBOLS
+def get_exchange_config(exchange_id: str) -> Dict[str, Any]:
+    """获取交易所配置"""
+    if exchange_id not in EXCHANGE_CONFIGS:
+        return None
+    return EXCHANGE_CONFIGS[exchange_id]
